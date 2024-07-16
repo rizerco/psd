@@ -2,7 +2,7 @@ use graphics::{Image, Size};
 
 use crate::{color_mode::ColorMode, layer::Layer};
 
-mod constants;
+pub(crate) mod constants;
 
 /// A Photoshop document.
 #[derive(Debug, Clone, PartialEq)]

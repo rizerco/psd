@@ -4,6 +4,7 @@ use graphics::{Image, Rect};
 use crate::{
     blend_mode::BlendMode,
     color_channel::{ColorChannel, ColorChannelType},
+    document,
 };
 
 use self::divider_type::DividerType;
@@ -14,15 +15,15 @@ mod divider_type;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Layer {
     /// The bounds of the layer.
-    pub bounds: Rect<f32>,
+    pub bounds: Rect<i32>,
     /// The number of channels for the layer.
-    pub number_of_channels: u16,
+    pub number_of_channels: i16,
     /// The channels for the layer.
     pub channels: Vec<ColorChannel>,
     /// The blend mode for the layer.
     pub blend_mode: BlendMode,
     /// The opacity of the layer (from 0.0 to 1.0).
-    pub opacity: f32,
+    pub opacity: u8,
     /// Whether or not the layer is hidden.
     pub is_hidden: bool,
     /// The layer’s name.
@@ -41,13 +42,13 @@ pub struct Layer {
 
 impl Layer {
     /// Creates a new Photoshop document layer.
-    pub fn new(bounds: Rect<f32>) -> Self {
+    pub fn new(bounds: Rect<i32>) -> Self {
         Self {
             bounds,
             number_of_channels: 4,
             channels: Vec::new(),
             blend_mode: BlendMode::Normal,
-            opacity: 1.0,
+            opacity: u8::MAX,
             is_hidden: false,
             name: None,
             image: None,
@@ -65,7 +66,7 @@ impl Layer {
         // Procreate can’t handle empty images, so we create a clear
         // image of the size of document.
         if self.image.is_none() && self.bounds != Rect::zero() {
-            self.image = Some(Image::empty(self.bounds.size.rounded().into()));
+            self.image = Some(Image::empty(self.bounds.size.into()));
         }
 
         let Some(image) = self.image.as_ref() else {
@@ -119,6 +120,68 @@ impl Layer {
 
         Ok(file_stream.data().to_vec())
     }
+
+    /// Returns the data for the layer record.
+    fn layer_record_data(&mut self) -> anyhow::Result<Vec<u8>> {
+        let mut file_stream = FileStreamWriter::new();
+
+        // The rectangle / bounds.
+        let top = self.bounds.min_y();
+        let left = self.bounds.min_x();
+        let bottom = self.bounds.max_y();
+        let right = self.bounds.max_x();
+        file_stream.write_be(&top)?;
+        file_stream.write_be(&left)?;
+        file_stream.write_be(&bottom)?;
+        file_stream.write_be(&right)?;
+
+        // The number of channels.
+        file_stream.write_be(&self.number_of_channels)?;
+
+        if self.channels.is_empty() {
+            self.update_channel_data();
+        }
+
+        // The channel information.
+        for channel in self.channels.iter_mut() {
+            file_stream.write_be(&channel.color_type.raw_value())?;
+
+            // The size is the size of the data plus the compression type byte.
+            let Ok(result) = channel.compressed_data(self.bounds.height() as u32) else {
+                continue;
+            };
+            file_stream.write_be(&(result.data.len() as u32 + i16::BITS))?;
+        }
+
+        file_stream.write_bytes(&document::constants::RESOURCE_SIGNATURE)?;
+        file_stream.write_bytes(&self.blend_mode.as_str().as_bytes())?;
+
+        file_stream.write_be(&self.opacity)?;
+
+        // Clipping… still don’t know what it means.
+        file_stream.write_be(&0u8)?;
+
+        // The flags… we only care about the visible flag (opposite to the documentation).
+        let flags: u8 = if self.is_hidden {
+            0b00000010
+        } else {
+            0b00000000
+        };
+        file_stream.write_be(&flags)?;
+
+        // Filler.
+        file_stream.write_be(&0u8)?;
+
+        let mut extra_data_file_stream = FileStreamWriter::new();
+        // Layer mask data — there are no layer masks, so we just put
+        // a zero for the size of this section.
+        extra_data_file_stream.write_be(&0u32)?;
+
+        // Layer blending ranges — can this be zero too?
+        extra_data_file_stream.write_be(&0u32)?;
+
+        Ok(file_stream.data().to_vec())
+    }
 }
 
 #[cfg(test)]
@@ -131,7 +194,7 @@ mod tests {
 
     #[test]
     fn encoded_image() {
-        let bounds = Rect::new(13.0, 12.0, 3.0, 2.0);
+        let bounds = Rect::new(13, 12, 3, 2);
         let mut layer = Layer::new(bounds);
         layer.name = Some("Frowning".to_string());
         let image = Image::color(
@@ -183,5 +246,81 @@ mod tests {
         let result = layer.encoded_image().unwrap();
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn clouds_layer_record_data() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/tiny-clouds.png");
+
+        let source_image = Image::open(&path).unwrap();
+
+        let bounds = Rect {
+            origin: Point::zero(),
+            size: source_image.size.into(),
+        };
+        let mut layer = Layer::new(bounds);
+        layer.name = Some("L1".to_string());
+        layer.image = Some(source_image);
+        // 00000000 00000000 00000004 00000007 0004
+
+        let result = layer.layer_record_data().unwrap();
+
+        // Top
+        assert_eq!(result[0..=3], [0x00, 0x00, 0x00, 0x00]);
+        // Left
+        assert_eq!(result[4..=7], [0x00, 0x00, 0x00, 0x00]);
+        // Bottom
+        assert_eq!(result[8..=11], [0x00, 0x00, 0x00, 0x04]);
+        // Right
+        assert_eq!(result[12..=15], [0x00, 0x00, 0x00, 0x07]);
+
+        // Number of channels
+        assert_eq!(result[16..=17], [0x00, 0x04]);
+
+        // Channel type (red)
+        assert_eq!(result[18..=19], [0x00, 0x00]);
+        // Channel data length.
+        assert_eq!(result[20..=23], [0x00, 0x00, 0x00, 0x1b]);
+
+        // Channel type (green)
+        assert_eq!(result[24..=25], [0x00, 0x01]);
+        // Channel data length.
+        assert_eq!(result[26..=29], [0x00, 0x00, 0x00, 0x1b]);
+
+        // Channel type (blue)
+        assert_eq!(result[30..=31], [0x00, 0x02]);
+        // Channel data length.
+        assert_eq!(result[32..=35], [0x00, 0x00, 0x00, 0x12]);
+
+        // Channel type (alpha)
+        assert_eq!(result[36..=37], [0xff, 0xff]);
+        // Channel data length.
+        assert_eq!(result[38..=41], [0x00, 0x00, 0x00, 0x12]);
+
+        // Resource signature (8BIM).
+        assert_eq!(result[42..=45], [0x38, 0x42, 0x49, 0x4d]);
+        // Blend mode (norm).
+        assert_eq!(result[46..=49], [0x6e, 0x6f, 0x72, 0x6d]);
+
+        // Opacity
+        assert_eq!(result[50], 0xff);
+        // Clipping
+        assert_eq!(result[51], 0x00);
+        // Flags (including visibility).
+        assert_eq!(result[52], 0x00);
+        // Filler.
+        assert_eq!(result[53], 0x00);
+
+        // Length of extra data (12).
+        assert_eq!(result[54..=57], [0x00, 0x00, 0x00, 0x20]);
+
+        // Mask.
+        assert_eq!(result[58..=61], [0x00, 0x00, 0x00, 0x00]);
+        // Blending ranges.
+        assert_eq!(result[62..=65], [0x00, 0x00, 0x00, 0x00]);
+
+        // Pascal name.
+        assert_eq!(result[66..=69], [0x02, 0x4c, 0x31, 0x00]);
     }
 }

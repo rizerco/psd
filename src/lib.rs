@@ -8,3 +8,4 @@ pub mod file_stream;
 mod image_compression;
 mod layer;
 mod rle;
+mod string;

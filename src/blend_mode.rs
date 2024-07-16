@@ -61,7 +61,7 @@ pub enum BlendMode {
 
 impl BlendMode {
     /// Returns the blend mode as a string slice.
-    fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::PassThrough => "pass",
             Self::Normal => "norm",
