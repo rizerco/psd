@@ -76,9 +76,9 @@ impl Layer {
         // Unlike some formats, this is never padded.
         let channel_data_length = (image.size.width * image.size.height) as usize;
         let mut red_channel = ColorChannel::new(ColorChannelType::Red, channel_data_length);
-        let mut green_channel = ColorChannel::new(ColorChannelType::Red, channel_data_length);
-        let mut blue_channel = ColorChannel::new(ColorChannelType::Red, channel_data_length);
-        let mut alpha_channel = ColorChannel::new(ColorChannelType::Red, channel_data_length);
+        let mut green_channel = ColorChannel::new(ColorChannelType::Green, channel_data_length);
+        let mut blue_channel = ColorChannel::new(ColorChannelType::Blue, channel_data_length);
+        let mut alpha_channel = ColorChannel::new(ColorChannelType::Alpha, channel_data_length);
 
         let width = image.size.width;
         let height = image.size.height;
@@ -238,6 +238,56 @@ mod tests {
 
         let encoded_image = layer.encoded_image().unwrap();
         assert_eq!(encoded_image, expected_data);
+    }
+
+    #[test]
+    fn channel_data() {
+        let mut resources_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        resources_path.push("tests/resources");
+        let alpha_data = std::fs::read(&resources_path.join("alphachannel.data")).unwrap();
+        let red_data = std::fs::read(&resources_path.join("redchannel.data")).unwrap();
+        let green_data = std::fs::read(&resources_path.join("greenchannel.data")).unwrap();
+        let blue_data = std::fs::read(&resources_path.join("bluechannel.data")).unwrap();
+        let image = Image::open(resources_path.join("layer.png")).unwrap();
+
+        let mut layer = Layer::new(Rect::new(6, 1, 764, 114));
+        layer.image = Some(image);
+        layer.name = Some("Layer".to_string());
+
+        // Need to call this to poulate the channels.
+        layer.encoded_image().unwrap();
+
+        let result_alpha = &layer
+            .channels
+            .iter()
+            .find(|channel| channel.color_type == ColorChannelType::Alpha)
+            .unwrap()
+            .data;
+        assert_eq!(result_alpha, &alpha_data);
+
+        let result_red = &layer
+            .channels
+            .iter()
+            .find(|channel| channel.color_type == ColorChannelType::Red)
+            .unwrap()
+            .data;
+        assert_eq!(result_red, &red_data);
+
+        let result_green = &layer
+            .channels
+            .iter()
+            .find(|channel| channel.color_type == ColorChannelType::Green)
+            .unwrap()
+            .data;
+        assert_eq!(result_green, &green_data);
+
+        let result_blue = &layer
+            .channels
+            .iter()
+            .find(|channel| channel.color_type == ColorChannelType::Blue)
+            .unwrap()
+            .data;
+        assert_eq!(result_blue, &blue_data);
     }
 
     #[test]
