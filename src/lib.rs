@@ -2,6 +2,7 @@ mod blend_mode;
 mod color_channel;
 mod color_mode;
 pub mod color_space;
+mod data;
 mod document;
 pub mod error;
 pub mod file_stream;
