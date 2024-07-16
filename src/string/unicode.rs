@@ -3,12 +3,13 @@ use file_stream::write::FileStreamWriter;
 use crate::document;
 
 /// Returns the unicode string data from a string.
-fn data_from_string(string: Option<String>) -> anyhow::Result<Vec<u8>> {
+pub fn data_from_string(string: Option<&String>) -> anyhow::Result<Vec<u8>> {
     let mut file_stream = FileStreamWriter::new();
     file_stream.write_bytes(&document::constants::RESOURCE_SIGNATURE)?;
     file_stream.write_bytes("luni".as_bytes())?;
 
-    let string = string.unwrap_or_default();
+    let empty_string = String::new();
+    let string = string.unwrap_or(&empty_string);
 
     let mut string_file_stream = FileStreamWriter::new();
 
@@ -44,7 +45,7 @@ mod tests {
             0x00, 0x72, // .r
         ];
 
-        let result = super::data_from_string(Some("Layer".to_string())).unwrap();
+        let result = super::data_from_string(Some(&"Layer".to_string())).unwrap();
 
         assert_eq!(result, expected_data);
     }
@@ -65,7 +66,7 @@ mod tests {
             0x00, 0x77, // .w
         ];
 
-        let result = super::data_from_string(Some("Yel’low".to_string())).unwrap();
+        let result = super::data_from_string(Some(&"Yel’low".to_string())).unwrap();
 
         assert_eq!(result, expected_data);
     }

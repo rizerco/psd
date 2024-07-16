@@ -1,11 +1,11 @@
 use file_stream::write::FileStreamWriter;
 use graphics::{Image, Rect};
 
-use crate::{
-    blend_mode::BlendMode,
-    color_channel::{ColorChannel, ColorChannelType},
-    document,
-};
+use crate::blend_mode::BlendMode;
+use crate::color_channel::{ColorChannel, ColorChannelType};
+use crate::data;
+use crate::document;
+use crate::string;
 
 use self::divider_type::DividerType;
 
@@ -179,6 +179,20 @@ impl Layer {
 
         // Layer blending ranges — can this be zero too?
         extra_data_file_stream.write_be(&0u32)?;
+
+        let mut name_data = string::pascal::data_from_string(self.name.as_ref())?;
+        data::pad(&mut name_data, 4);
+        extra_data_file_stream.write_bytes(&name_data)?;
+
+        let unicode_name_data = string::unicode::data_from_string(self.name.as_ref())?;
+        extra_data_file_stream.write_bytes(&unicode_name_data)?;
+
+        if let Some(layer_information) = &self.additional_layer_information {
+            extra_data_file_stream.write_bytes(layer_information)?;
+        }
+
+        file_stream.write_be(&(extra_data_file_stream.data().len() as u32))?;
+        file_stream.write_bytes(&extra_data_file_stream.data())?;
 
         Ok(file_stream.data().to_vec())
     }
