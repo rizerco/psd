@@ -167,3 +167,31 @@ impl LayerContainer for Document {
         self.layers.iter().collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use graphics::Color;
+
+    use super::*;
+
+    #[test]
+    fn file_data() {
+        let mut document = Document::new();
+        document.size = Size {
+            width: 32,
+            height: 16,
+        };
+
+        let layer_0_bounds = Rect::new(2, 1, 14, 17);
+        let mut layer_0 = Layer::new(layer_0_bounds);
+        layer_0.name = Some("Yellow".to_string());
+        let yellow_image = Image::color(&Color::YELLOW, layer_0_bounds.size.into());
+        layer_0.image = Some(yellow_image);
+
+        document.layers = vec![layer_0];
+
+        let data = document.file_data().unwrap();
+
+        std::fs::write("/tmp/yellow.psd", &data).unwrap();
+    }
+}
