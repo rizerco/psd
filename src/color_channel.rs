@@ -3,7 +3,7 @@ mod channel_type;
 pub use channel_type::ColorChannelType;
 use file_stream::write::FileStreamWriter;
 
-use crate::{error::WriteError, image_compression::ImageCompression, rle};
+use crate::{data, error::WriteError, image_compression::ImageCompression, rle};
 
 /// A colour channel holds the data for one channel of
 /// colours for an image.
@@ -53,8 +53,10 @@ impl ColorChannel {
         image_height: u32,
     ) -> anyhow::Result<CompressedDataResult> {
         if self.data.len() <= 2 {
+            let mut data = self.data.clone();
+            data::pad(&mut data, 2);
             return Ok(CompressedDataResult {
-                data: self.data.clone(),
+                data,
                 compression: ImageCompression::RawData,
             });
         } else if let Some(compressed_data) = self.compressed_data.clone() {

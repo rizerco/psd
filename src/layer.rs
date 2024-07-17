@@ -8,12 +8,16 @@ use crate::document;
 use crate::string;
 
 use self::divider_type::DividerType;
+use self::group::GroupInfo;
 
 mod divider_type;
+mod group;
 
 /// A layer in a Photoshop document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Layer {
+    /// The layer type.
+    pub layer_type: LayerType,
     /// The bounds of the layer.
     pub bounds: Rect<i32>,
     /// The number of channels for the layer.
@@ -38,12 +42,22 @@ pub struct Layer {
     divider_type: DividerType,
 }
 
+/// The type of the layer.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LayerType {
+    /// A standard layer that shows an image.
+    Image,
+    /// A group layer.
+    Group(GroupInfo),
+}
+
 // MARK: Creation
 
 impl Layer {
     /// Creates a new Photoshop document layer.
     pub fn new(bounds: Rect<i32>) -> Self {
         Self {
+            layer_type: LayerType::Image,
             bounds,
             number_of_channels: 4,
             channels: Vec::new(),
@@ -104,7 +118,7 @@ impl Layer {
 
 impl Layer {
     /// Returns the image encoded per channel.
-    fn encoded_image(&mut self) -> anyhow::Result<Vec<u8>> {
+    pub fn encoded_image(&mut self) -> anyhow::Result<Vec<u8>> {
         let mut file_stream = FileStreamWriter::new();
         if self.channels.is_empty() {
             self.update_channel_data();
@@ -122,7 +136,7 @@ impl Layer {
     }
 
     /// Returns the data for the layer record.
-    fn layer_record_data(&mut self) -> anyhow::Result<Vec<u8>> {
+    pub fn layer_record_data(&mut self) -> anyhow::Result<Vec<u8>> {
         let mut file_stream = FileStreamWriter::new();
 
         // The rectangle / bounds.

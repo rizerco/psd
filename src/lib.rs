@@ -8,5 +8,6 @@ pub mod error;
 pub mod file_stream;
 mod image_compression;
 mod layer;
+mod layer_container;
 mod rle;
 mod string;
