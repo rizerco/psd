@@ -6,6 +6,7 @@ mod data;
 mod document;
 pub mod error;
 pub mod file_stream;
+mod image;
 mod image_compression;
 mod layer;
 mod layer_container;
