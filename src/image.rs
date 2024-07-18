@@ -38,7 +38,20 @@ pub fn psd_data(image: &Image, compression: &ImageCompression) -> anyhow::Result
     let mut file_stream = FileStreamWriter::new();
     file_stream.write_be(&compression.raw_value())?;
     if compression == &ImageCompression::Rle {
-        todo!()
+        let red = red_channel.rle_encoded_components(image.size.height)?;
+        let green = green_channel.rle_encoded_components(image.size.height)?;
+        let blue = blue_channel.rle_encoded_components(image.size.height)?;
+        let alpha = alpha_channel.rle_encoded_components(image.size.height)?;
+        // Put all of the line lengths up front.
+        file_stream.write_bytes(&red.line_lengths)?;
+        file_stream.write_bytes(&green.line_lengths)?;
+        file_stream.write_bytes(&blue.line_lengths)?;
+        file_stream.write_bytes(&alpha.line_lengths)?;
+        // Then write all of the actual image data.
+        file_stream.write_bytes(&red.data)?;
+        file_stream.write_bytes(&green.data)?;
+        file_stream.write_bytes(&blue.data)?;
+        file_stream.write_bytes(&alpha.data)?;
     } else {
         file_stream.write_bytes(&red_channel.data)?;
         file_stream.write_bytes(&green_channel.data)?;
@@ -110,5 +123,89 @@ mod tests {
 
         // Alpha
         assert_eq!(data[14..=17], [0x99, 0x99, 0x99, 0x99]);
+    }
+
+    #[test]
+    fn rle_data() {
+        let color = Color::from_rgb_u32(0x24a4ee); // A mid blue
+        let image = Image::color(
+            &color,
+            Size {
+                width: 2,
+                height: 2,
+            },
+        );
+        let data = super::psd_data(&image, &ImageCompression::Rle).unwrap();
+
+        // Compression type
+        assert_eq!(data[0..=1], [0x00, 0x01]);
+
+        // All of the line lengths (2 rows x 4 channels).
+        assert_eq!(data[2..=3], [0x00, 0x03]);
+        assert_eq!(data[4..=5], [0x00, 0x03]);
+        assert_eq!(data[6..=7], [0x00, 0x03]);
+        assert_eq!(data[8..=9], [0x00, 0x03]);
+        assert_eq!(data[10..=11], [0x00, 0x03]);
+        assert_eq!(data[12..=13], [0x00, 0x03]);
+        assert_eq!(data[14..=15], [0x00, 0x03]);
+        assert_eq!(data[16..=17], [0x00, 0x03]);
+
+        // Red
+        assert_eq!(data[18..=20], [0x01, 0x24, 0x24]);
+        assert_eq!(data[21..=23], [0x01, 0x24, 0x24]);
+
+        // Green
+        assert_eq!(data[24..=26], [0x01, 0xa4, 0xa4]);
+        assert_eq!(data[27..=29], [0x01, 0xa4, 0xa4]);
+
+        // Blue
+        assert_eq!(data[30..=32], [0x01, 0xee, 0xee]);
+        assert_eq!(data[33..=35], [0x01, 0xee, 0xee]);
+
+        // Alpha
+        assert_eq!(data[36..=38], [0x01, 0xff, 0xff]);
+        assert_eq!(data[39..=41], [0x01, 0xff, 0xff]);
+    }
+
+    #[test]
+    fn rle_data_with_alpha() {
+        let color = Color::from_rgba_u32(0x24a4ee99); // A mid blue
+        let image = Image::color(
+            &color,
+            Size {
+                width: 2,
+                height: 2,
+            },
+        );
+        let data = super::psd_data(&image, &ImageCompression::Rle).unwrap();
+
+        // Compression type
+        assert_eq!(data[0..=1], [0x00, 0x01]);
+
+        // All of the line lengths (2 rows x 4 channels).
+        assert_eq!(data[2..=3], [0x00, 0x03]);
+        assert_eq!(data[4..=5], [0x00, 0x03]);
+        assert_eq!(data[6..=7], [0x00, 0x03]);
+        assert_eq!(data[8..=9], [0x00, 0x03]);
+        assert_eq!(data[10..=11], [0x00, 0x03]);
+        assert_eq!(data[12..=13], [0x00, 0x03]);
+        assert_eq!(data[14..=15], [0x00, 0x03]);
+        assert_eq!(data[16..=17], [0x00, 0x03]);
+
+        // Red
+        assert_eq!(data[18..=20], [0x01, 0x24, 0x24]);
+        assert_eq!(data[21..=23], [0x01, 0x24, 0x24]);
+
+        // Green
+        assert_eq!(data[24..=26], [0x01, 0xa4, 0xa4]);
+        assert_eq!(data[27..=29], [0x01, 0xa4, 0xa4]);
+
+        // Blue
+        assert_eq!(data[30..=32], [0x01, 0xee, 0xee]);
+        assert_eq!(data[33..=35], [0x01, 0xee, 0xee]);
+
+        // Alpha
+        assert_eq!(data[36..=38], [0x01, 0x99, 0x99]);
+        assert_eq!(data[39..=41], [0x01, 0x99, 0x99]);
     }
 }
