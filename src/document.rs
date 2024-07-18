@@ -3,7 +3,10 @@ use std::mem;
 use file_stream::write::FileStreamWriter;
 use graphics::{Image, Point, Rect, Size};
 
-use crate::{color_mode::ColorMode, data, layer::Layer, layer_container::LayerContainer};
+use crate::{
+    color_mode::ColorMode, data, image, image_compression::ImageCompression, layer::Layer,
+    layer_container::LayerContainer,
+};
 
 pub(crate) mod constants;
 
@@ -162,7 +165,8 @@ impl Document {
         // IMAGE DATA SECTION
         // A flattened preview image.
         if let Some(preview_image) = &self.preview_image {
-            // let preview_image_data = preview_image
+            let preview_image_data = image::psd_data(preview_image, &ImageCompression::Rle)?;
+            file_stream.write_bytes(&preview_image_data)?;
         }
 
         Ok(file_stream.data().to_vec())
