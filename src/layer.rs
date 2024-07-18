@@ -1,3 +1,5 @@
+use std::mem;
+
 use file_stream::write::FileStreamWriter;
 use graphics::{Image, Rect};
 
@@ -164,7 +166,7 @@ impl Layer {
             let Ok(result) = channel.compressed_data(self.bounds.height() as u32) else {
                 continue;
             };
-            file_stream.write_be(&(result.data.len() as u32 + i16::BITS))?;
+            file_stream.write_be(&(result.data.len() as u32 + mem::size_of::<i16>() as u32))?;
         }
 
         file_stream.write_bytes(&document::constants::RESOURCE_SIGNATURE)?;

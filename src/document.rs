@@ -1,3 +1,5 @@
+use std::mem;
+
 use file_stream::write::FileStreamWriter;
 use graphics::{Image, Point, Rect, Size};
 
@@ -62,6 +64,9 @@ impl Document {
         file_stream.write_be(&self.size.width)?;
 
         // The colour depth.
+        file_stream.write_be(&8i16)?;
+
+        // The colour mode.
         file_stream.write_be(&ColorMode::Rgb.raw_value())?;
 
         // The colour mode data (come back to this when we have indexed documents).
@@ -88,6 +93,7 @@ impl Document {
         // Selected layer (set to zero).
         image_resources_file_stream.write_bytes(&constants::RESOURCE_SIGNATURE)?;
         image_resources_file_stream.write_be(&constants::resource_identifiers::LAYER_STATE)?;
+
         // Write null for the name.
         image_resources_file_stream.write_be(&0i16)?;
         // The size is 2 bytes.
@@ -103,8 +109,11 @@ impl Document {
         image_resources_file_stream.write_be(&0i16)?;
 
         // Write the size of the group IDs data.
-        let layers_group_identifiers_size = self.number_of_layers() as u32 * u16::BITS;
+        let layers_group_identifiers_size =
+            self.number_of_layers() as u32 * mem::size_of::<u16>() as u32;
+        dbg!(layers_group_identifiers_size);
         image_resources_file_stream.write_be(&layers_group_identifiers_size)?;
+        // image_resources_file_stream.write_be(&255u8)?;
         // For each layer (including groups), output the group ID.
         for _ in 0..self.number_of_layers() {
             image_resources_file_stream.write_be(&0i16)?;
@@ -170,6 +179,8 @@ impl LayerContainer for Document {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use graphics::Color;
 
     use super::*;
@@ -192,6 +203,11 @@ mod tests {
 
         let data = document.file_data().unwrap();
 
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/yellow.psd");
+        let expected_data = std::fs::read(path).unwrap();
+
         std::fs::write("/tmp/yellow.psd", &data).unwrap();
+        assert_eq!(data, expected_data);
     }
 }
