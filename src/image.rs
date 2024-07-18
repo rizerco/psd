@@ -83,4 +83,32 @@ mod tests {
         // Alpha
         assert_eq!(data[14..=17], [0xff, 0xff, 0xff, 0xff]);
     }
+
+    #[test]
+    fn raw_data_with_alpha() {
+        let color = Color::from_rgba_u32(0x23a4ee99);
+        let image = Image::color(
+            &color,
+            Size {
+                width: 2,
+                height: 2,
+            },
+        );
+        let data = super::psd_data(&image, &ImageCompression::RawData).unwrap();
+
+        // Compression type
+        assert_eq!(data[0..=1], [0x00, 0x00]);
+
+        // Red
+        assert_eq!(data[2..=5], [0x23, 0x23, 0x23, 0x23]);
+
+        // Green
+        assert_eq!(data[6..=9], [0xa4, 0xa4, 0xa4, 0xa4]);
+
+        // Blue
+        assert_eq!(data[10..=13], [0xee, 0xee, 0xee, 0xee]);
+
+        // Alpha
+        assert_eq!(data[14..=17], [0x99, 0x99, 0x99, 0x99]);
+    }
 }
