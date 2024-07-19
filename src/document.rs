@@ -217,6 +217,37 @@ mod tests {
     }
 
     #[test]
+    fn file_data_2x1() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/2x1.png");
+        let image = Image::open(&path).unwrap();
+
+        let mut document = Document::new();
+        document.size = image.size;
+        document.preview_image = Some(image.clone());
+
+        let layer_0_bounds = Rect {
+            origin: Point::zero(),
+            size: image.size.into(),
+        };
+        let mut layer_0 = Layer::new(layer_0_bounds);
+        layer_0.name = Some("L1".to_string());
+        layer_0.image = Some(image);
+
+        document.layers = vec![layer_0];
+
+        let data = document.file_data().unwrap();
+
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/2x1.psd");
+        let expected_data = std::fs::read(path).unwrap();
+
+        std::fs::write("/tmp/2x1.psd", &data).unwrap();
+
+        assert_eq!(data, expected_data);
+    }
+
+    #[test]
     fn file_data_simple() {
         let image = Image::color(
             &Color::CYAN,
