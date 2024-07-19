@@ -476,23 +476,23 @@ mod tests {
         // Number of channels
         assert_eq!(result[16..=17], [0x00, 0x04]);
 
-        // Channel type (red)
-        assert_eq!(result[18..=19], [0x00, 0x00]);
+        // Channel type (alpha)
+        assert_eq!(result[18..=19], [0xff, 0xff]);
         // Channel data length.
-        assert_eq!(result[20..=23], [0x00, 0x00, 0x00, 0x1b]);
+        assert_eq!(result[20..=23], [0x00, 0x00, 0x00, 0x12]);
 
-        // Channel type (green)
-        assert_eq!(result[24..=25], [0x00, 0x01]);
+        // Channel type (red)
+        assert_eq!(result[24..=25], [0x00, 0x00]);
         // Channel data length.
         assert_eq!(result[26..=29], [0x00, 0x00, 0x00, 0x1b]);
 
-        // Channel type (blue)
-        assert_eq!(result[30..=31], [0x00, 0x02]);
+        // Channel type (green)
+        assert_eq!(result[30..=31], [0x00, 0x01]);
         // Channel data length.
-        assert_eq!(result[32..=35], [0x00, 0x00, 0x00, 0x12]);
+        assert_eq!(result[32..=35], [0x00, 0x00, 0x00, 0x1b]);
 
-        // Channel type (alpha)
-        assert_eq!(result[36..=37], [0xff, 0xff]);
+        // Channel type (blue)
+        assert_eq!(result[36..=37], [0x00, 0x02]);
         // Channel data length.
         assert_eq!(result[38..=41], [0x00, 0x00, 0x00, 0x12]);
 
