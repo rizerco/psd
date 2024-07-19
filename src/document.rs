@@ -114,7 +114,6 @@ impl Document {
         // Write the size of the group IDs data.
         let layers_group_identifiers_size =
             self.number_of_layers() as u32 * mem::size_of::<u16>() as u32;
-        dbg!(layers_group_identifiers_size);
         image_resources_file_stream.write_be(&layers_group_identifiers_size)?;
         // image_resources_file_stream.write_be(&255u8)?;
         // For each layer (including groups), output the group ID.
@@ -122,7 +121,7 @@ impl Document {
             image_resources_file_stream.write_be(&0i16)?;
         }
 
-        // Write the images resourcces section.
+        // Write the images resources section.
         file_stream.write_be(&(image_resources_file_stream.data().len() as u32))?;
         file_stream.write_bytes(&image_resources_file_stream.data())?;
 
@@ -213,5 +212,84 @@ mod tests {
 
         std::fs::write("/tmp/yellow.psd", &data).unwrap();
         assert_eq!(data, expected_data);
+    }
+
+    #[test]
+    fn file_data_2x1() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/2x1.png");
+        let image = Image::open(&path).unwrap();
+
+        let mut document = Document::new();
+        document.size = image.size;
+
+        let layer_0_bounds = Rect {
+            origin: Point::zero(),
+            size: image.size.into(),
+        };
+        let mut layer_0 = Layer::new(layer_0_bounds);
+        layer_0.name = Some("L1".to_string());
+        layer_0.image = Some(image);
+
+        document.layers = vec![layer_0];
+
+        let data = document.file_data().unwrap();
+
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/2x1-magick-raw.psd");
+        let expected_data = std::fs::read(path).unwrap();
+
+        std::fs::write("/tmp/2x1.psd", &data).unwrap();
+        // Header
+        assert_eq!(data[0..30], expected_data[0..30]);
+        // Image resources
+        assert_eq!(data[30..90], expected_data[30..90]);
+    }
+
+    #[test]
+    fn file_data_simple() {
+        let image = Image::color(
+            &Color::CYAN,
+            Size {
+                width: 2,
+                height: 2,
+            },
+        );
+
+        let mut document = Document::new();
+        document.size = image.size;
+
+        let bounds = Rect {
+            origin: Point::zero(),
+            size: image.size.into(),
+        };
+        let mut layer_0 = Layer::new(bounds);
+        layer_0.name = Some("Background".to_string());
+        layer_0.image = Some(image);
+
+        let mut layer_1 = Layer::new(bounds);
+        layer_1.name = Some("Empty".to_string());
+
+        document.layers = vec![layer_0, layer_1];
+
+        let data = document.file_data().unwrap();
+
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/simple.psd");
+        let expected_data = std::fs::read(path).unwrap();
+
+        std::fs::write("/tmp/simple.psd", &data).unwrap();
+        // Header
+        assert_eq!(data[0..30], expected_data[0..30]);
+        // Image resources
+        assert_eq!(data[30..92], expected_data[30..92]);
+        // Layer and mask info length
+        // assert_eq!(data[92..96], expected_data[92..96]);
+        // Layer info length
+        // assert_eq!(data[96..100], expected_data[96..100]);
+        assert_eq!(data[100..158], expected_data[100..158]);
+        // assert_eq!(data[100..308], expected_data[100..308]);
+
+        // assert_eq!(data, expected_data);
     }
 }

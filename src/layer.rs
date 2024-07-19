@@ -112,7 +112,8 @@ impl Layer {
             }
         }
 
-        self.channels = vec![red_channel, green_channel, blue_channel, alpha_channel];
+        // Convention seems to be to put the alpha channel first.
+        self.channels = vec![alpha_channel, red_channel, green_channel, blue_channel];
     }
 }
 
@@ -218,42 +219,159 @@ impl Layer {
 mod tests {
     use std::path::PathBuf;
 
-    use graphics::{Color, Point, Size};
+    use graphics::{Color, Point};
 
     use super::*;
 
     #[test]
-    fn encoded_image() {
-        let bounds = Rect::new(13, 12, 3, 2);
+    fn update_channel_data() {
+        let bounds = Rect::new(0, 0, 2, 2);
         let mut layer = Layer::new(bounds);
-        layer.name = Some("Frowning".to_string());
-        let image = Image::color(
+        layer.image = Some(Image::color(
             &Color {
-                red: 128,
-                green: 0,
-                blue: 128,
-                alpha: 255,
+                red: 0xab,
+                green: 0xcd,
+                blue: 0xef,
+                alpha: 0x91,
             },
-            Size {
-                width: 2,
-                height: 2,
-            },
-        );
+            bounds.size.into(),
+        ));
+
+        assert_eq!(layer.channels.len(), 0);
+
+        layer.update_channel_data();
+
+        assert_eq!(layer.channels.len(), 4);
+
+        let red_channel = &layer.channels[1];
+        assert_eq!(red_channel.color_type, ColorChannelType::Red);
+        assert_eq!(red_channel.data, vec![0xab, 0xab, 0xab, 0xab]);
+
+        let green_channel = &layer.channels[2];
+        assert_eq!(green_channel.color_type, ColorChannelType::Green);
+        assert_eq!(green_channel.data, vec![0xcd, 0xcd, 0xcd, 0xcd]);
+
+        let blue_channel = &layer.channels[3];
+        assert_eq!(blue_channel.color_type, ColorChannelType::Blue);
+        assert_eq!(blue_channel.data, vec![0xef, 0xef, 0xef, 0xef]);
+
+        let alpha_channel = &layer.channels[0];
+        assert_eq!(alpha_channel.color_type, ColorChannelType::Alpha);
+        assert_eq!(alpha_channel.data, vec![0x91, 0x91, 0x91, 0x91]);
+    }
+
+    #[test]
+    fn encoded_image_2x2() {
+        let bounds = Rect::new(0, 0, 2, 2);
+        let mut layer = Layer::new(bounds);
+        let image = Image::color(&Color::from_rgb_u32(0x50d1e7), bounds.size.into());
         layer.image = Some(image);
 
-        let expected_data = vec![
-            0x00, 0x01, // Compression type
-            0x00, 0x04, 0x00, 0x04, 0x02, 0x80, 0x80, 0x00, 0x02, 0x80, 0x80, 0x00, // Red
-            0x00, 0x01, // Compression type
-            0x00, 0x02, 0x00, 0x02, 0xFE, 0x00, 0xFE, 0x00, // Green
-            0x00, 0x01, // Compression type
-            0x00, 0x04, 0x00, 0x04, 0x02, 0x80, 0x80, 0x00, 0x02, 0x80, 0x80, 0x00, // Blue
-            0x00, 0x01, // Compression type
-            0x00, 0x04, 0x00, 0x04, 0x02, 0xFF, 0xFF, 0x00, 0x02, 0xFF, 0xFF, 0x00, // Alpha
-        ];
+        let encoded_image = layer.encoded_image().unwrap();
+
+        // Both Acorn and Pixelmator produce exactly this data, so it
+        // can be trusted.
+
+        // Alpha compression (RLE).
+        assert_eq!(encoded_image[0..2], [0x00, 0x01]);
+        // First row size.
+        assert_eq!(encoded_image[2..4], [0x00, 0x03]);
+        // Second row size.
+        assert_eq!(encoded_image[4..6], [0x00, 0x03]);
+        // Two byes of 0xFF in the top row.
+        assert_eq!(encoded_image[6..9], [0x01, 0xff, 0xff]);
+        // Two byes of 0xFF in the bottom row.
+        assert_eq!(encoded_image[9..12], [0x01, 0xff, 0xff]);
+
+        // Red compression (RLE).
+        assert_eq!(encoded_image[12..14], [0x00, 0x01]);
+        // First row size.
+        assert_eq!(encoded_image[14..16], [0x00, 0x03]);
+        // Second row size.
+        assert_eq!(encoded_image[16..18], [0x00, 0x03]);
+        // Two byes of 0x50 in the top row.
+        assert_eq!(encoded_image[18..21], [0x01, 0x50, 0x50]);
+        // Two byes of 0x50 in the bottom row.
+        assert_eq!(encoded_image[21..24], [0x01, 0x50, 0x50]);
+
+        // Green compression (RLE).
+        assert_eq!(encoded_image[24..26], [0x00, 0x01]);
+        // First row size.
+        assert_eq!(encoded_image[26..28], [0x00, 0x03]);
+        // Second row size.
+        assert_eq!(encoded_image[28..30], [0x00, 0x03]);
+        // Two byes of 0xd1 in the top row.
+        assert_eq!(encoded_image[30..33], [0x01, 0xd1, 0xd1]);
+        // Two byes of 0xd1 in the bottom row.
+        assert_eq!(encoded_image[33..36], [0x01, 0xd1, 0xd1]);
+
+        // Blue compression (RLE).
+        assert_eq!(encoded_image[36..38], [0x00, 0x01]);
+        // First row size.
+        assert_eq!(encoded_image[38..40], [0x00, 0x03]);
+        // Second row size.
+        assert_eq!(encoded_image[40..42], [0x00, 0x03]);
+        // Two byes of 0xe7 in the top row.
+        assert_eq!(encoded_image[42..45], [0x01, 0xe7, 0xe7]);
+        // Two byes of 0xe7 in the bottom row.
+        assert_eq!(encoded_image[45..48], [0x01, 0xe7, 0xe7]);
+    }
+
+    #[test]
+    fn encoded_image_2x3() {
+        let bounds = Rect::new(0, 0, 3, 2);
+        let mut layer = Layer::new(bounds);
+        let image = Image::color(&Color::from_rgb_u32(0x50d1e7), bounds.size.into());
+        layer.image = Some(image);
 
         let encoded_image = layer.encoded_image().unwrap();
-        assert_eq!(encoded_image, expected_data);
+
+        // Both Acorn and Pixelmator produce exactly this data, so it
+        // can be trusted.
+
+        // Alpha compression (RLE).
+        assert_eq!(encoded_image[0..2], [0x00, 0x01]);
+        // First row size.
+        assert_eq!(encoded_image[2..4], [0x00, 0x02]);
+        // Second row size.
+        assert_eq!(encoded_image[4..6], [0x00, 0x02]);
+        // Three repeated byes of 0xFF in the top row.
+        assert_eq!(encoded_image[6..8], [0xfe, 0xff]);
+        // Three repeated byes of 0xFF in the bottom row.
+        assert_eq!(encoded_image[8..10], [0xfe, 0xff]);
+
+        // Red compression (RLE).
+        assert_eq!(encoded_image[10..12], [0x00, 0x01]);
+        // First row size.
+        assert_eq!(encoded_image[12..14], [0x00, 0x02]);
+        // Second row size.
+        assert_eq!(encoded_image[14..16], [0x00, 0x02]);
+        // Three repeated byes of 0x50 in the top row.
+        assert_eq!(encoded_image[16..18], [0xfe, 0x50]);
+        // Three repeated byes of 0x50 in the bottom row.
+        assert_eq!(encoded_image[18..20], [0xfe, 0x50]);
+
+        // Green compression (RLE).
+        assert_eq!(encoded_image[20..22], [0x00, 0x01]);
+        // First row size.
+        assert_eq!(encoded_image[22..24], [0x00, 0x02]);
+        // Second row size.
+        assert_eq!(encoded_image[24..26], [0x00, 0x02]);
+        // Three repeated byes of 0xd1 in the top row.
+        assert_eq!(encoded_image[26..28], [0xfe, 0xd1]);
+        // Three repeated byes of 0xd1 in the bottom row.
+        assert_eq!(encoded_image[28..30], [0xfe, 0xd1]);
+
+        // Blue compression (RLE).
+        assert_eq!(encoded_image[30..32], [0x00, 0x01]);
+        // First row size.
+        assert_eq!(encoded_image[32..34], [0x00, 0x02]);
+        // Second row size.
+        assert_eq!(encoded_image[34..36], [0x00, 0x02]);
+        // Three repeated byes of 0xe7 in the top row.
+        assert_eq!(encoded_image[36..38], [0xfe, 0xe7]);
+        // Three repeated byes of 0xe7 in the bottom row.
+        assert_eq!(encoded_image[38..40], [0xfe, 0xe7]);
     }
 
     #[test]

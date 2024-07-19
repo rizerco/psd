@@ -156,6 +156,17 @@ mod tests {
     }
 
     #[test]
+    fn encode_with_repeat_of_three() {
+        let original_data = vec![0x7F, 0x7F, 0x7F, 0x00];
+        let encoded_data = super::encoded(&original_data);
+
+        assert_eq!(encoded_data[0], 0xFE); // A repeat of 3
+        assert_eq!(encoded_data[1], 0x7F);
+        assert_eq!(encoded_data[2], 0x00); // Non-repeat for 1
+        assert_eq!(encoded_data[3], 0x00);
+    }
+
+    #[test]
     fn rle_encode_with_double_repeat_of_two() {
         let original_data = vec![0xB1, 0xB1, 0x00, 0x00];
 

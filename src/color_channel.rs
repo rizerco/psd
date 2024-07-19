@@ -53,8 +53,7 @@ impl ColorChannel {
         image_height: u32,
     ) -> anyhow::Result<CompressedDataResult> {
         if self.data.len() <= 2 {
-            let mut data = self.data.clone();
-            data::pad(&mut data, 2);
+            let data = self.data.clone();
             return Ok(CompressedDataResult {
                 data,
                 compression: ImageCompression::RawData,
