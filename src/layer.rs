@@ -442,6 +442,7 @@ mod tests {
         let expected = std::fs::read(&path).unwrap();
 
         let result = layer.encoded_image().unwrap();
+        // std::fs::write("/tmp/clouds-encoded-image.data", &result).unwrap();
 
         assert_eq!(result, expected);
     }

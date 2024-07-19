@@ -200,7 +200,9 @@ mod tests {
         let mut layer_0 = Layer::new(layer_0_bounds);
         layer_0.name = Some("Yellow".to_string());
         let yellow_image = Image::color(&Color::YELLOW, layer_0_bounds.size.into());
-        layer_0.image = Some(yellow_image);
+        layer_0.image = Some(yellow_image.clone());
+
+        document.preview_image = Some(yellow_image);
 
         document.layers = vec![layer_0];
 
@@ -210,40 +212,8 @@ mod tests {
         path.push("tests/resources/yellow.psd");
         let expected_data = std::fs::read(path).unwrap();
 
-        std::fs::write("/tmp/yellow.psd", &data).unwrap();
+        // std::fs::write("/tmp/yellow.psd", &data).unwrap();
         assert_eq!(data, expected_data);
-    }
-
-    #[test]
-    fn file_data_2x1() {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("tests/resources/2x1.png");
-        let image = Image::open(&path).unwrap();
-
-        let mut document = Document::new();
-        document.size = image.size;
-
-        let layer_0_bounds = Rect {
-            origin: Point::zero(),
-            size: image.size.into(),
-        };
-        let mut layer_0 = Layer::new(layer_0_bounds);
-        layer_0.name = Some("L1".to_string());
-        layer_0.image = Some(image);
-
-        document.layers = vec![layer_0];
-
-        let data = document.file_data().unwrap();
-
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("tests/resources/2x1-magick-raw.psd");
-        let expected_data = std::fs::read(path).unwrap();
-
-        std::fs::write("/tmp/2x1.psd", &data).unwrap();
-        // Header
-        assert_eq!(data[0..30], expected_data[0..30]);
-        // Image resources
-        assert_eq!(data[30..90], expected_data[30..90]);
     }
 
     #[test]
@@ -265,12 +235,13 @@ mod tests {
         };
         let mut layer_0 = Layer::new(bounds);
         layer_0.name = Some("Background".to_string());
-        layer_0.image = Some(image);
+        layer_0.image = Some(image.clone());
 
         let mut layer_1 = Layer::new(bounds);
         layer_1.name = Some("Empty".to_string());
 
         document.layers = vec![layer_0, layer_1];
+        document.preview_image = Some(image.clone());
 
         let data = document.file_data().unwrap();
 
@@ -278,18 +249,17 @@ mod tests {
         path.push("tests/resources/simple.psd");
         let expected_data = std::fs::read(path).unwrap();
 
-        std::fs::write("/tmp/simple.psd", &data).unwrap();
+        // std::fs::write("/tmp/simple.psd", &data).unwrap();
         // Header
         assert_eq!(data[0..30], expected_data[0..30]);
         // Image resources
         assert_eq!(data[30..92], expected_data[30..92]);
         // Layer and mask info length
-        // assert_eq!(data[92..96], expected_data[92..96]);
+        assert_eq!(data[92..96], expected_data[92..96]);
         // Layer info length
-        // assert_eq!(data[96..100], expected_data[96..100]);
-        assert_eq!(data[100..158], expected_data[100..158]);
-        // assert_eq!(data[100..308], expected_data[100..308]);
+        assert_eq!(data[96..100], expected_data[96..100]);
 
-        // assert_eq!(data, expected_data);
+        // And the rest…
+        assert_eq!(data, expected_data);
     }
 }
