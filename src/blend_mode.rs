@@ -130,3 +130,69 @@ impl From<&str> for BlendMode {
         }
     }
 }
+
+impl From<graphics::BlendMode> for BlendMode {
+    fn from(value: graphics::BlendMode) -> Self {
+        match value {
+            graphics::BlendMode::Addition => BlendMode::LinearDodge,
+            graphics::BlendMode::Color => BlendMode::Color,
+            graphics::BlendMode::ColorBurn => BlendMode::ColorBurn,
+            graphics::BlendMode::ColorDodge => BlendMode::ColorDodge,
+            graphics::BlendMode::Darken => BlendMode::Darken,
+            graphics::BlendMode::Difference => BlendMode::Difference,
+            graphics::BlendMode::Divide => BlendMode::Divide,
+            graphics::BlendMode::Exclusion => BlendMode::Exclusion,
+            graphics::BlendMode::HardLight => BlendMode::HardLight,
+            graphics::BlendMode::Hue => BlendMode::Hue,
+            graphics::BlendMode::Lighten => BlendMode::Lighten,
+            graphics::BlendMode::Luminosity => BlendMode::Luminosity,
+            graphics::BlendMode::Multiply => BlendMode::Multiply,
+            graphics::BlendMode::Normal => BlendMode::Normal,
+            graphics::BlendMode::Overlay => BlendMode::Overlay,
+            graphics::BlendMode::PassThrough => BlendMode::PassThrough,
+            graphics::BlendMode::Saturation => BlendMode::Saturation,
+            graphics::BlendMode::Screen => BlendMode::Screen,
+            graphics::BlendMode::SoftLight => BlendMode::SoftLight,
+            graphics::BlendMode::Subtract => BlendMode::Subtract,
+            graphics::BlendMode::DestinationIn => BlendMode::Normal,
+            graphics::BlendMode::DestinationOut => BlendMode::Normal,
+        }
+    }
+}
+
+impl From<BlendMode> for graphics::BlendMode {
+    fn from(value: BlendMode) -> Self {
+        match value {
+            BlendMode::PassThrough => graphics::BlendMode::PassThrough,
+            BlendMode::Normal => graphics::BlendMode::Normal,
+            BlendMode::Darken => graphics::BlendMode::Darken,
+            BlendMode::Multiply => graphics::BlendMode::Multiply,
+            BlendMode::ColorBurn => graphics::BlendMode::ColorBurn,
+            BlendMode::Lighten => graphics::BlendMode::Lighten,
+            BlendMode::Screen => graphics::BlendMode::Screen,
+            BlendMode::ColorDodge => graphics::BlendMode::ColorDodge,
+            BlendMode::Overlay => graphics::BlendMode::Overlay,
+            BlendMode::SoftLight => graphics::BlendMode::SoftLight,
+            BlendMode::HardLight => graphics::BlendMode::HardLight,
+            BlendMode::Difference => graphics::BlendMode::Difference,
+            BlendMode::Exclusion => graphics::BlendMode::Exclusion,
+            BlendMode::Subtract => graphics::BlendMode::Subtract,
+            BlendMode::Divide => graphics::BlendMode::Divide,
+            BlendMode::Hue => graphics::BlendMode::Hue,
+            BlendMode::Saturation => graphics::BlendMode::Saturation,
+            BlendMode::Color => graphics::BlendMode::Color,
+            BlendMode::Luminosity => graphics::BlendMode::Luminosity,
+            // These blend modes aren’t compatible —
+            // what’s the best way to handle that?
+            BlendMode::Dissolve => graphics::BlendMode::Normal,
+            BlendMode::LinearBurn => graphics::BlendMode::Normal,
+            BlendMode::DarkerColor => graphics::BlendMode::Normal,
+            BlendMode::LinearDodge => graphics::BlendMode::Normal,
+            BlendMode::LighterColor => graphics::BlendMode::Normal,
+            BlendMode::VividLight => graphics::BlendMode::Normal,
+            BlendMode::LinearLight => graphics::BlendMode::Normal,
+            BlendMode::PinLight => graphics::BlendMode::Normal,
+            BlendMode::HardMix => graphics::BlendMode::Normal,
+        }
+    }
+}

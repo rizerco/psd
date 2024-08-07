@@ -28,7 +28,7 @@ pub struct Layer {
     pub channels: Vec<ColorChannel>,
     /// The blend mode for the layer.
     pub blend_mode: BlendMode,
-    /// The opacity of the layer (from 0.0 to 1.0).
+    /// The opacity of the layer (from 0 to 100).
     pub opacity: u8,
     /// Whether or not the layer is hidden.
     pub is_hidden: bool,
@@ -64,7 +64,7 @@ impl Layer {
             number_of_channels: 4,
             channels: Vec::new(),
             blend_mode: BlendMode::Normal,
-            opacity: u8::MAX,
+            opacity: 100,
             is_hidden: false,
             name: None,
             image: None,

@@ -3,10 +3,11 @@ use std::mem;
 use file_stream::write::FileStreamWriter;
 use graphics::{Image, Point, Rect, Size};
 
-use crate::{
-    color_mode::ColorMode, data, image, image_compression::ImageCompression, layer::Layer,
-    layer_container::LayerContainer,
-};
+use crate::color_mode::ColorMode;
+use crate::image_compression::ImageCompression;
+use crate::layer::Layer;
+use crate::layer_container::LayerContainer;
+use crate::{data, image};
 
 pub(crate) mod constants;
 

@@ -12,3 +12,7 @@ mod layer;
 mod layer_container;
 mod rle;
 mod string;
+
+pub use blend_mode::*;
+pub use document::*;
+pub use layer::*;
