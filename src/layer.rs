@@ -64,7 +64,7 @@ impl Layer {
             number_of_channels: 4,
             channels: Vec::new(),
             blend_mode: BlendMode::Normal,
-            opacity: 100,
+            opacity: u8::MAX,
             is_hidden: false,
             name: None,
             image: None,
