@@ -243,7 +243,7 @@ mod tests {
         path.push("tests/resources/2x1.psd");
         let expected_data = std::fs::read(path).unwrap();
 
-        std::fs::write("/tmp/2x1.psd", &data).unwrap();
+        // std::fs::write("/tmp/2x1.psd", &data).unwrap();
 
         assert_eq!(data, expected_data);
     }
