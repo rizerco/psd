@@ -156,6 +156,7 @@ impl From<graphics::BlendMode> for BlendMode {
             graphics::BlendMode::Subtract => BlendMode::Subtract,
             graphics::BlendMode::DestinationIn => BlendMode::Normal,
             graphics::BlendMode::DestinationOut => BlendMode::Normal,
+            graphics::BlendMode::Replace => BlendMode::Normal,
         }
     }
 }
