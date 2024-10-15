@@ -1,9 +1,11 @@
+use std::ops::DerefMut;
+
 use crate::layer::Layer;
 use crate::layer::LayerType;
 
 /// Specification for an object that can contain layers.
 pub trait LayerContainer {
-    // Returns the layers.
+    /// Returns the layers.
     fn layers(&self) -> Vec<&Layer>;
 
     /// Returns the number of sublayers.
@@ -19,5 +21,20 @@ pub trait LayerContainer {
         }
 
         count
+    }
+
+    /// Returns all the layers by recursing into any groups
+    /// in this container.
+    fn all_layers(&self) -> Vec<&Layer> {
+        let mut output = Vec::new();
+
+        for layer in self.layers() {
+            output.push(layer);
+            if let LayerType::Group(info) = &layer.layer_type {
+                output.append(&mut info.layers());
+            };
+        }
+
+        output
     }
 }

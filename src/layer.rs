@@ -72,6 +72,28 @@ impl Layer {
             divider_type: DividerType::Other,
         }
     }
+
+    /// Creates a new Photoshop group layer.
+    pub fn group(child_layers: Vec<Layer>, is_open: bool) -> Self {
+        let divider_type = if is_open {
+            DividerType::OpenFolder
+        } else {
+            DividerType::ClosedFolder
+        };
+        Self {
+            layer_type: LayerType::Group(GroupInfo::new(child_layers)),
+            bounds: Rect::zero(),
+            number_of_channels: 4,
+            channels: Vec::new(),
+            blend_mode: BlendMode::Normal,
+            opacity: u8::MAX,
+            is_hidden: false,
+            name: None,
+            image: None,
+            additional_layer_information: None,
+            divider_type,
+        }
+    }
 }
 
 // MARK: Updates

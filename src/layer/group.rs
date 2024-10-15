@@ -6,7 +6,16 @@ use super::Layer;
 #[derive(Debug, Clone, PartialEq)]
 pub struct GroupInfo {
     /// The child layers.
-    layers: Vec<Layer>,
+    pub layers: Vec<Layer>,
+}
+
+// MARK: Creation
+
+impl GroupInfo {
+    /// Creates new a new group info structure.
+    pub fn new(layers: Vec<Layer>) -> Self {
+        Self { layers }
+    }
 }
 
 impl LayerContainer for GroupInfo {

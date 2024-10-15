@@ -7,7 +7,7 @@ use crate::color_mode::ColorMode;
 use crate::image_compression::ImageCompression;
 use crate::layer::Layer;
 use crate::layer_container::LayerContainer;
-use crate::{data, image};
+use crate::{data, image, LayerType};
 
 pub(crate) mod constants;
 
@@ -48,7 +48,7 @@ impl Document {
 
 impl Document {
     /// Return the data for the file.
-    pub fn file_data(&mut self) -> anyhow::Result<Vec<u8>> {
+    pub fn file_data(&self) -> anyhow::Result<Vec<u8>> {
         // TODO: Create a file stream on disk to avoid
         // potentially running out of RAM.
         let mut file_stream = FileStreamWriter::new();
@@ -132,8 +132,16 @@ impl Document {
         let mut layer_info_file_stream = FileStreamWriter::new();
         layer_info_file_stream.write_be(&((self.number_of_layers() as i16) * -1))?;
 
+        // Obviously cloning here is bad. Really we need to rethink so many of these
+        // methods being mutable.
+        let mut layers: Vec<Layer> = self
+            .all_layers()
+            .iter()
+            .map(|&layer| layer.clone())
+            .collect();
+
         // Layer records.
-        for layer in self.layers.iter_mut() {
+        for layer in layers.iter_mut() {
             // Procreate can’t handle zero width and height.
             if layer.bounds == Rect::zero() {
                 layer.bounds = Rect {
@@ -145,7 +153,7 @@ impl Document {
         }
 
         // Layer images.
-        for layer in self.layers.iter_mut() {
+        for layer in layers.iter_mut() {
             layer_info_file_stream.write_bytes(&(layer.encoded_image()?))?;
         }
 
@@ -292,6 +300,47 @@ mod tests {
         assert_eq!(data[96..100], expected_data[96..100]);
 
         // And the rest…
+        assert_eq!(data, expected_data);
+    }
+
+    #[test]
+    fn file_data_with_group() {
+        let image = Image::color(
+            &Color::MAGENTA,
+            Size {
+                width: 2,
+                height: 2,
+            },
+        );
+
+        let mut document = Document::new();
+        document.size = image.size;
+
+        let bounds = Rect {
+            origin: Point::zero(),
+            size: image.size.into(),
+        };
+        let mut layer_0 = Layer::new(bounds);
+        layer_0.name = Some("Background".to_string());
+        layer_0.image = Some(image.clone());
+
+        let mut layer_1 = Layer::new(bounds);
+        layer_1.name = Some("Empty".to_string());
+
+        let mut group = Layer::group(vec![layer_0, layer_1], true);
+        group.name = Some("Group".to_string());
+
+        document.layers = vec![group];
+        document.preview_image = Some(image.clone());
+
+        let data = document.file_data().unwrap();
+
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests/resources/simple.psd");
+        let expected_data = std::fs::read(path).unwrap();
+
+        std::fs::write("/tmp/simple-with-group.psd", &data).unwrap();
+
         assert_eq!(data, expected_data);
     }
 }
