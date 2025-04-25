@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.75"
+anyhow = "1.0.98"
 file_stream = { git = "https://github.com/rizerco/file_stream.git" }
 graphics = { git = "https://github.com/rizerco/graphics.git" }
-thiserror = "1.0.56"
+thiserror = "1.0.69"
 
 # [patch."https://github.com/rizerco/file_stream.git"]
 # file_stream = { path = "../file_stream" }
