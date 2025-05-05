@@ -101,6 +101,9 @@ impl Layer {
 impl Layer {
     /// Updates the channel data for the image.
     fn update_channel_data(&mut self) {
+        if let LayerType::Group(_) = self.layer_type {
+            return;
+        }
         // Procreate can’t handle empty images, so we create a clear
         // image of the size of document.
         if self.image.is_none() && self.bounds != Rect::zero() {
@@ -144,6 +147,14 @@ impl Layer {
 impl Layer {
     /// Returns the image encoded per channel.
     pub fn encoded_image(&mut self) -> anyhow::Result<Vec<u8>> {
+        match self.layer_type.clone() {
+            LayerType::Image => self.layer_encoded_image(),
+            LayerType::Group(mut group_info) => self.group_encoded_image(&mut group_info),
+        }
+    }
+
+    /// Returns the image encoded per channel for a layer.
+    fn layer_encoded_image(&mut self) -> anyhow::Result<Vec<u8>> {
         let mut file_stream = FileStreamWriter::new();
         if self.channels.is_empty() {
             self.update_channel_data();
@@ -160,8 +171,38 @@ impl Layer {
         Ok(file_stream.data().to_vec())
     }
 
+    /// Returns the encoded image data for a group marker.
+    fn group_encoded_image(&mut self, group_info: &mut GroupInfo) -> anyhow::Result<Vec<u8>> {
+        let mut file_stream = FileStreamWriter::new();
+
+        // Write zero for each channel.
+        for _ in 0..self.number_of_channels {
+            file_stream.write_be(&0i16)?;
+        }
+
+        // Write layers in the group in here.
+        for layer in group_info.layers.iter_mut() {
+            file_stream.write_bytes(&layer.encoded_image()?)?;
+        }
+
+        // End of folder.
+        for _ in 0..self.number_of_channels {
+            file_stream.write_be(&0i16)?;
+        }
+
+        Ok(file_stream.data().to_vec())
+    }
+
+    /// Returns the data for the layer, which may represent a group.
+    pub fn record_data(&mut self) -> anyhow::Result<Vec<u8>> {
+        match self.layer_type.clone() {
+            LayerType::Image => self.layer_record_data(),
+            LayerType::Group(mut group_info) => self.group_record_data(&mut group_info),
+        }
+    }
+
     /// Returns the data for the layer record.
-    pub fn layer_record_data(&mut self) -> anyhow::Result<Vec<u8>> {
+    fn layer_record_data(&mut self) -> anyhow::Result<Vec<u8>> {
         let mut file_stream = FileStreamWriter::new();
 
         // The rectangle / bounds.
@@ -235,13 +276,34 @@ impl Layer {
 
         Ok(file_stream.data().to_vec())
     }
+
+    /// Returns record data for a group.
+    fn group_record_data(&mut self, group_info: &mut GroupInfo) -> anyhow::Result<Vec<u8>> {
+        let mut group_marker = Layer::group_marker()?;
+        let mut data = group_marker.layer_record_data()?;
+
+        // Write layers in the group in here.
+        for layer in group_info.layers.iter_mut() {
+            // Procreate can’t handle zero width and height.
+            if layer.bounds == Rect::zero() {
+                layer.bounds = self.bounds;
+            }
+            let mut record_data = layer.record_data()?;
+            data.append(&mut record_data);
+        }
+
+        let mut layer_record_data = self.layer_record_data()?;
+        data.append(&mut layer_record_data);
+        Ok(data)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
-    use graphics::{Color, Point};
+    use file_stream::read::FileStreamReader;
+    use graphics::{Color, Point, Size};
 
     use super::*;
 
@@ -470,6 +532,119 @@ mod tests {
     }
 
     #[test]
+    fn record_data() {
+        let bounds = Rect {
+            origin: Point::zero(),
+            size: Size {
+                width: 2,
+                height: 2,
+            },
+        };
+
+        let mut layer = Layer::new(bounds);
+        layer.name = Some("Frowning".to_string());
+        let image = Image::color(&Color::YELLOW, bounds.size.into());
+        layer.image = Some(image);
+
+        let mut result_file_stream =
+            FileStreamReader::from_data(layer.record_data().unwrap()).unwrap();
+
+        // Top of bounding box.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x00]
+        );
+        // Left.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x00]
+        );
+        // Bottom.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x02]
+        );
+        // Right.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x02]
+        );
+        // Number of channels.
+        assert_eq!(result_file_stream.read_bytes(2).unwrap(), [0x00, 0x04]);
+        // Alpha channel identifier.
+        assert_eq!(result_file_stream.read_bytes(2).unwrap(), [0xFF, 0xFF]);
+        // Alpha channel length.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x0c]
+        );
+        // Red channel identifier.
+        assert_eq!(result_file_stream.read_bytes(2).unwrap(), [0x00, 0x00]);
+        // Red channel length.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x0c]
+        );
+        // Green channel identifier.
+        assert_eq!(result_file_stream.read_bytes(2).unwrap(), [0x00, 0x01]);
+        // Green channel length.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x0c]
+        );
+        // Blue channel identifier.
+        assert_eq!(result_file_stream.read_bytes(2).unwrap(), [0x00, 0x02]);
+        // Blue channel length.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x0c]
+        );
+        // Blend mode signature.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x38, 0x42, 0x49, 0x4D]
+        );
+        // Blend mode.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x6E, 0x6F, 0x72, 0x6D]
+        );
+        // Opacity.
+        assert_eq!(result_file_stream.read_bytes(1).unwrap(), [0xFF]);
+        // Clipping.
+        result_file_stream.skip_bytes(1).unwrap();
+        // Flags (includes visibility)
+        assert_eq!(result_file_stream.read_bytes(1).unwrap(), [0x00]);
+        // Filler.
+        result_file_stream.skip_bytes(1).unwrap();
+
+        // Extra data length.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x34]
+        );
+
+        // Mask data.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x00]
+        );
+        // Blending ranges.
+        assert_eq!(
+            result_file_stream.read_bytes(4).unwrap(),
+            [0x00, 0x00, 0x00, 0x00]
+        );
+
+        // Layer name.
+        assert_eq!(
+            result_file_stream.read_bytes(12).unwrap(),
+            [0x08, 0x46, 0x72, 0x6F, 0x77, 0x6E, 0x69, 0x6E, 0x67, 0x00, 0x00, 0x00]
+        );
+
+        // try? layer.layerRecordData.write(to: URL(fileURLWithPath: "/tmp/*maxston.data"))
+    }
+
+    #[test]
     fn clouds_layer_record_data() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("tests/resources/tiny-clouds.png");
@@ -485,7 +660,7 @@ mod tests {
         layer.image = Some(source_image);
         // 00000000 00000000 00000004 00000007 0004
 
-        let result = layer.layer_record_data().unwrap();
+        let result = layer.record_data().unwrap();
 
         // Top
         assert_eq!(result[0..=3], [0x00, 0x00, 0x00, 0x00]);
