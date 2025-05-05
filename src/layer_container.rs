@@ -1,5 +1,3 @@
-use std::ops::DerefMut;
-
 use crate::layer::Layer;
 use crate::layer::LayerType;
 

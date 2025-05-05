@@ -52,6 +52,15 @@ impl Layer {
         ];
         layer.name = Some("</Layer group>".to_string());
 
+        let mut additional_info_file_stream = FileStreamWriter::new();
+        additional_info_file_stream.write_bytes(&document::constants::RESOURCE_SIGNATURE)?;
+        additional_info_file_stream.write_bytes(&constants::SECTION_DIVIDER_KEY)?;
+        additional_info_file_stream.write_be(&(mem::size_of::<u32>() as u32))?;
+        let divider_type = DividerType::SectionDivider;
+        additional_info_file_stream.write_be(&(divider_type as u32))?;
+
+        layer.additional_layer_information = Some(additional_info_file_stream.data().to_vec());
+
         Ok(layer)
     }
 }
