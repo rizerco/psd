@@ -530,6 +530,34 @@ mod tests {
     }
 
     #[test]
+    fn encoded_group_image() {
+        let image = Image::color(
+            &Color::MAGENTA,
+            Size {
+                width: 2,
+                height: 2,
+            },
+        );
+
+        let bounds = Rect {
+            origin: Point::zero(),
+            size: image.size.into(),
+        };
+        let mut layer_0 = Layer::new(bounds);
+        layer_0.name = Some("Background".to_string());
+        layer_0.image = Some(image.clone());
+
+        let mut group = Layer::group(vec![layer_0], true, image.size);
+        group.name = Some("Groupella".to_string());
+
+        let result = group.encoded_image().unwrap();
+        // std::fs::write("/tmp/encoded-group-image-rs.data", result).unwrap();
+        let expected = std::fs::read("tests/resources/encoded-group-image.data").unwrap();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
     fn channel_data() {
         let mut resources_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         resources_path.push("tests/resources");
@@ -709,7 +737,9 @@ mod tests {
         // Layer name.
         assert_eq!(
             result_file_stream.read_bytes(12).unwrap(),
-            [0x08, 0x46, 0x72, 0x6F, 0x77, 0x6E, 0x69, 0x6E, 0x67, 0x00, 0x00, 0x00]
+            [
+                0x08, 0x46, 0x72, 0x6F, 0x77, 0x6E, 0x69, 0x6E, 0x67, 0x00, 0x00, 0x00
+            ]
         );
 
         // try? layer.layerRecordData.write(to: URL(fileURLWithPath: "/tmp/*maxston.data"))
