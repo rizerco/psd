@@ -140,17 +140,25 @@ impl Document {
             .map(|&layer| layer.clone())
             .collect();
 
+        println!("🎡 layers: {:?}", layers.len());
+
         // Layer records.
         for layer in layers.iter_mut() {
             // Procreate can’t handle zero width and height.
-            if layer.bounds == Rect::zero() {
+            println!(
+                "💜 fixing bounds for {:?}: {:?}, {:?}",
+                layer.name, layer.bounds, self.size
+            );
+            if layer.bounds == Rect::zero() && layer.layer_type != LayerType::GroupMarker {
                 layer.bounds = Rect {
                     origin: Point::zero(),
                     size: self.size.into(),
                 };
             }
-            layer_info_file_stream.write_bytes(&(layer.layer_record_data()?))?;
+            layer_info_file_stream.write_bytes(&(layer.record_data()?))?;
         }
+
+        // layer_info_file_stream.write_bytes(&[0xd0, 0x0d, 0xad])?;
 
         // Layer images.
         for layer in layers.iter_mut() {
@@ -165,6 +173,8 @@ impl Document {
 
         // The global layer mask info.
         layer_and_mask_info_file_stream.write_be(&0u32)?;
+
+        println!("{:X?}", layer_and_mask_info_file_stream.data());
 
         // Write the layer info to the global file stream.
         file_stream.write_be(&(layer_and_mask_info_file_stream.data().len() as u32))?;
@@ -289,7 +299,7 @@ mod tests {
         path.push("tests/resources/simple.psd");
         let expected_data = std::fs::read(path).unwrap();
 
-        // std::fs::write("/tmp/simple.psd", &data).unwrap();
+        std::fs::write("/tmp/simple.psd", &data).unwrap();
         // Header
         assert_eq!(data[0..30], expected_data[0..30]);
         // Image resources
@@ -324,11 +334,11 @@ mod tests {
         layer_0.name = Some("Background".to_string());
         layer_0.image = Some(image.clone());
 
-        let mut layer_1 = Layer::new(bounds);
-        layer_1.name = Some("Empty".to_string());
+        // let mut layer_1 = Layer::new(bounds);
+        // layer_1.name = Some("Empty".to_string());
 
-        let mut group = Layer::group(vec![layer_0, layer_1], true);
-        group.name = Some("Group".to_string());
+        let mut group = Layer::group(vec![layer_0], true, document.size);
+        group.name = Some("Groupella".to_string());
 
         document.layers = vec![group];
         document.preview_image = Some(image.clone());
@@ -339,7 +349,10 @@ mod tests {
         path.push("tests/resources/simple.psd");
         let expected_data = std::fs::read(path).unwrap();
 
-        std::fs::write("/tmp/simple-with-group.psd", &data).unwrap();
+        std::fs::write("/tmp/simple-with-group-rs.psd", &data).unwrap();
+
+        let data = document.layers[0].record_data().unwrap();
+        std::fs::write("/tmp/group-record-data-rs.data", &data).unwrap();
 
         assert_eq!(data, expected_data);
     }
