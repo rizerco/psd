@@ -244,11 +244,6 @@ impl Layer {
             self.update_channel_data();
         }
 
-        // if let LayerType::Group(_) = self.layer_type {
-        //     println!("🍉 {:?} channels: {:02X?}", self.name, file_stream.data());
-        //     println!("🍉 {:?} bounds: {:02X?}", self.name, self.bounds);
-        // }
-
         // The channel information.
         for channel in self.channels.iter_mut() {
             file_stream.write_be(&channel.color_type.raw_value())?;
@@ -262,11 +257,6 @@ impl Layer {
             let Ok(result) = channel.compressed_data(self.bounds.height() as u32) else {
                 continue;
             };
-            println!(
-                "🍉 data length for {:?}: {:?}",
-                self.name,
-                result.data.len()
-            );
             file_stream.write_be(&(result.data.len() as u32 + mem::size_of::<i16>() as u32))?;
         }
 
@@ -319,8 +309,6 @@ impl Layer {
         let mut group_marker = Layer::group_marker()?;
         let mut data = group_marker.layer_record_data()?;
 
-        // TESTING: Group layer marker matches Swift output
-
         // Write layers in the group in here.
         for layer in group_info.layers.iter_mut() {
             // Procreate can’t handle zero width and height.
@@ -331,10 +319,7 @@ impl Layer {
             data.append(&mut record_data);
         }
 
-        // TESTING: Child layer data matches Swift output
-
         let mut layer_record_data = self.layer_record_data()?;
-        println!("🫐 group layer data: {:02X?}", layer_record_data);
         data.append(&mut layer_record_data);
         Ok(data)
     }

@@ -132,15 +132,9 @@ impl Document {
         let mut layer_info_file_stream = FileStreamWriter::new();
         layer_info_file_stream.write_be(&((self.number_of_layers() as i16) * -1))?;
 
-        println!("🎡 layers: {:?}", self.layers.len());
-
         // Layer records.
         for layer in self.layers.iter_mut() {
             // Procreate can’t handle zero width and height.
-            println!(
-                "💜 fixing bounds for {:?}: {:?}, {:?}",
-                layer.name, layer.bounds, self.size
-            );
             if layer.bounds == Rect::zero() && layer.layer_type != LayerType::GroupMarker {
                 layer.bounds = Rect {
                     origin: Point::zero(),
@@ -165,8 +159,6 @@ impl Document {
 
         // The global layer mask info.
         layer_and_mask_info_file_stream.write_be(&0u32)?;
-
-        println!("{:X?}", layer_and_mask_info_file_stream.data());
 
         // Write the layer info to the global file stream.
         file_stream.write_be(&(layer_and_mask_info_file_stream.data().len() as u32))?;
@@ -338,13 +330,10 @@ mod tests {
         let data = document.file_data().unwrap();
 
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("tests/resources/simple.psd");
+        path.push("tests/resources/simple-with-group.psd");
         let expected_data = std::fs::read(path).unwrap();
 
-        std::fs::write("/tmp/simple-with-group-rs.psd", &data).unwrap();
-
-        let data = document.layers[0].record_data().unwrap();
-        std::fs::write("/tmp/group-record-data-rs.data", &data).unwrap();
+        // std::fs::write("/tmp/simple-with-group-rs.psd", &data).unwrap();
 
         assert_eq!(data, expected_data);
     }
