@@ -7,7 +7,7 @@ use crate::color_mode::ColorMode;
 use crate::image_compression::ImageCompression;
 use crate::layer::Layer;
 use crate::layer_container::LayerContainer;
-use crate::{data, image, LayerType};
+use crate::{LayerType, data, image};
 
 pub(crate) mod constants;
 
@@ -48,7 +48,7 @@ impl Document {
 
 impl Document {
     /// Return the data for the file.
-    pub fn file_data(&self) -> anyhow::Result<Vec<u8>> {
+    pub fn file_data(&mut self) -> anyhow::Result<Vec<u8>> {
         // TODO: Create a file stream on disk to avoid
         // potentially running out of RAM.
         let mut file_stream = FileStreamWriter::new();
@@ -132,18 +132,10 @@ impl Document {
         let mut layer_info_file_stream = FileStreamWriter::new();
         layer_info_file_stream.write_be(&((self.number_of_layers() as i16) * -1))?;
 
-        // Obviously cloning here is bad. Really we need to rethink so many of these
-        // methods being mutable.
-        let mut layers: Vec<Layer> = self
-            .all_layers()
-            .iter()
-            .map(|&layer| layer.clone())
-            .collect();
-
-        println!("🎡 layers: {:?}", layers.len());
+        println!("🎡 layers: {:?}", self.layers.len());
 
         // Layer records.
-        for layer in layers.iter_mut() {
+        for layer in self.layers.iter_mut() {
             // Procreate can’t handle zero width and height.
             println!(
                 "💜 fixing bounds for {:?}: {:?}, {:?}",
@@ -161,7 +153,7 @@ impl Document {
         // layer_info_file_stream.write_bytes(&[0xd0, 0x0d, 0xad])?;
 
         // Layer images.
-        for layer in layers.iter_mut() {
+        for layer in self.layers.iter_mut() {
             layer_info_file_stream.write_bytes(&(layer.encoded_image()?))?;
         }
 
