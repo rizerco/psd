@@ -20,16 +20,15 @@ pub enum ColorChannelType {
 
 impl ColorChannelType {
     /// Creates a new color channel type from a raw value.
-    pub fn from_value(value: i16) -> Option<Self> {
+    pub fn from_value(value: i16) -> Self {
         match value {
-            0 => Some(ColorChannelType::Red),
-            1 => Some(ColorChannelType::Green),
-            2 => Some(ColorChannelType::Blue),
-            -1 => Some(ColorChannelType::Alpha),
-            -2 => Some(ColorChannelType::UserSuppliedLayerMask),
-            -3 => Some(ColorChannelType::RealUserSuppliedLayerMask),
-            9999 => Some(ColorChannelType::Unknown),
-            _ => None,
+            0 => ColorChannelType::Red,
+            1 => ColorChannelType::Green,
+            2 => ColorChannelType::Blue,
+            -1 => ColorChannelType::Alpha,
+            -2 => ColorChannelType::UserSuppliedLayerMask,
+            -3 => ColorChannelType::RealUserSuppliedLayerMask,
+            _ => ColorChannelType::Unknown,
         }
     }
 

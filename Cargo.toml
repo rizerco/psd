@@ -11,8 +11,8 @@ file_stream = { git = "https://github.com/rizerco/file_stream.git" }
 graphics = { git = "https://github.com/rizerco/graphics.git" }
 thiserror = "1.0.69"
 
-# [patch."https://github.com/rizerco/file_stream.git"]
-# file_stream = { path = "../file_stream" }
+[patch."https://github.com/rizerco/file_stream.git"]
+file_stream = { path = "../file_stream" }
 
-# [patch."https://github.com/rizerco/graphics.git"]
-# graphics = { path = "../graphics" }
+[patch."https://github.com/rizerco/graphics.git"]
+graphics = { path = "../graphics" }

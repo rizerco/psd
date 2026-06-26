@@ -1,13 +1,17 @@
 use std::mem;
+use std::path::Path;
 
+use file_stream::read::FileStreamReader;
 use file_stream::write::FileStreamWriter;
+use graphics::image::ImageConstraints;
 use graphics::{Image, Point, Rect, Size};
 
 use crate::color_mode::ColorMode;
+use crate::error::ReadError;
 use crate::image_compression::ImageCompression;
 use crate::layer::Layer;
 use crate::layer_container::LayerContainer;
-use crate::{LayerType, data, image};
+use crate::{LayerType, data, error, image};
 
 pub(crate) mod constants;
 
@@ -31,7 +35,7 @@ pub struct Document {
 // MARK: Creation
 
 impl Document {
-    /// Creates an empty photoshop document.
+    /// Creates an empty Photoshop document.
     pub fn new() -> Self {
         Self {
             number_of_channels: 4,
@@ -41,6 +45,130 @@ impl Document {
             preview_image: None,
             layers: Vec::new(),
         }
+    }
+
+    /// Open a Photoshop document from disk.
+    pub fn open<P: AsRef<Path>>(file_path: P) -> anyhow::Result<Self> {
+        Self::open_with_constraints(file_path, None, None)
+    }
+
+    /// Open a Photoshop document from disk, with the option to apply
+    /// constraints on the maximum image size and number of layers.
+    pub fn open_with_constraints<P: AsRef<Path>>(
+        file_path: P,
+        size_constraints: Option<ImageConstraints>,
+        maximum_layers: Option<u32>,
+    ) -> anyhow::Result<Self> {
+        let mut file_stream = FileStreamReader::open(file_path)?;
+
+        let mut output = Document::new();
+
+        //
+        // HEADER SECTION
+        //
+
+        // Check that the file signature is correct.
+        if file_stream.read_bytes(4)? != constants::FILE_SIGNATURE {
+            anyhow::bail!(ReadError::InvalidFileSignature);
+        };
+
+        // Check the version number
+        if file_stream.read_be::<i16>()? != constants::VERSION_NUMBER {
+            anyhow::bail!(ReadError::UnsupportedVersionNumber)
+        }
+
+        // Next 6 bytes are reserved.
+        file_stream.skip_bytes(6)?;
+
+        // Parse channels
+        output.number_of_channels = file_stream.read_be()?;
+
+        // Parse the size.
+        output.size.height = file_stream.read_be()?;
+        output.size.width = file_stream.read_be()?;
+
+        if let Some(max_size) = size_constraints
+            .as_ref()
+            .and_then(|constraints| constraints.maximum_size)
+        {
+            if output.size.width > max_size.width || output.size.height > max_size.height {
+                anyhow::bail!(ReadError::MaximumSizeExceeded)
+            }
+        }
+
+        if let Some(max_resolution) = size_constraints
+            .as_ref()
+            .and_then(|constraints| constraints.maximum_resolution)
+        {
+            let resolution = output.size.width * output.size.height;
+            if resolution > max_resolution {
+                anyhow::bail!(ReadError::MaximumSizeExceeded)
+            }
+        }
+
+        // Parse colour depth information.
+        output.bits_per_channel = file_stream.read_be()?;
+
+        if let Some(parsed_color_mode) = ColorMode::from_value(file_stream.read_be()?) {
+            output.color_mode = parsed_color_mode;
+        }
+
+        // TODO: Throw an error if this colour mode isn’t supported.
+
+        //
+        // COLOUR MODE DATA SECTION
+        //
+
+        let color_mode_data_length: u32 = file_stream.read_be()?;
+        // Right now, we’re not supporting indexed colours,
+        // so just skip however many bytes we need to.
+        file_stream.skip_bytes(color_mode_data_length as usize)?;
+
+        //
+        // IMAGE RESOURCES SECTION
+        //
+
+        let image_resources_section_length: u32 = file_stream.read_be()?;
+        // What is this section about? Not sure. Let’s skip it!
+        file_stream.skip_bytes(image_resources_section_length as usize)?;
+
+        //
+        // LAYER AND MASK INFORMATION SECTION
+        //
+
+        let layers_section_length: u32 = file_stream.read_be()?;
+
+        if layers_section_length == 0 {
+            anyhow::bail!(ReadError::NoLayerInformation)
+        }
+        let layers_info_length: u32 = file_stream.read_be()?;
+
+        if layers_info_length > 0 {
+            // The number of layers might be negative according to the documentation.
+            let number_of_layers = (file_stream.read_be::<i16>()?).abs();
+
+            // Check that the maximum number of layers hasn’t been exceeded.
+            if let Some(max_layers) = maximum_layers {
+                if number_of_layers as u32 > max_layers {
+                    anyhow::bail!(ReadError::MaximumNumberOfLayersExceeded)
+                }
+            }
+
+            // The data is structured so that all of the layer info
+            // is grouped together.
+            for _ in 0..number_of_layers {
+                let layer = Layer::from_file_stream(&mut file_stream)?;
+                output.layers.push(layer);
+            }
+
+            // The layer images are grouped together after
+            // the layer info for all of the layers.
+            // for layer in output.layers {
+            //     layer.parseImageFromFileStream(file_stream, imageCompression: nil, context: context)
+            // }
+        }
+
+        Ok(output)
     }
 }
 
@@ -184,7 +312,45 @@ impl LayerContainer for Document {
 }
 
 #[cfg(test)]
-mod tests {
+mod import_tests {
+    use crate::Document;
+
+    #[test]
+    fn small() {
+        let document = Document::open("tests/resources/small.psd").unwrap();
+        assert_eq!(
+            document.size,
+            graphics::Size {
+                width: 2,
+                height: 1
+            }
+        );
+    }
+    //
+    // let filePath = Bundle.module.path(forResource: "SimpleWithFolders", ofType: "psd")!
+    // let fileURL = URL(fileURLWithPath: filePath)
+    // let photoshopDocument = try? Document(fileURL: fileURL, context: self.renderContext, maximumAllowableSize: CGSize(width: 1024.0, height: 1024.0), maximumNumberOfLayers: 100)
+
+    // XCTAssertNotNil(photoshopDocument, "The parsed Photoshop document should not be nil.")
+    // XCTAssertEqual(photoshopDocument?.layers.count, 3, "The number of layers was not the expected value.")
+
+    // guard let group0 = photoshopDocument?.layers[0] as? Group else {
+    //     XCTFail("Expected a group")
+    //     return
+    // }
+    // XCTAssertEqual(group0.name, "Frame 1")
+    // XCTAssertEqual(group0.layers.compactMap { $0.name }, ["Layer 1", "Layer 2"])
+
+    // guard let group1 = photoshopDocument?.layers[1] as? Group else {
+    //     XCTFail("Expected a group")
+    //     return
+    // }
+    // XCTAssertEqual(group1.name, "Frame 2")
+    // XCTAssertEqual(group1.layers.compactMap { $0.name }, ["Layer 1"])
+}
+
+#[cfg(test)]
+mod export_tests {
     use std::path::PathBuf;
 
     use graphics::Color;

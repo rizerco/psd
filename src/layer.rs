@@ -1,13 +1,16 @@
 use std::mem;
 
+use file_stream::read::{FileStreamReader, Readable};
 use file_stream::write::FileStreamWriter;
 use graphics::{Image, Point, Rect, Size};
 
 use crate::blend_mode::BlendMode;
 use crate::color_channel::{ColorChannel, ColorChannelType};
-use crate::data;
 use crate::document;
-use crate::string;
+use crate::error::ReadError;
+use crate::image_compression::ImageCompression;
+use crate::string::{self, pascal};
+use crate::{constants, data};
 
 use self::divider_type::DividerType;
 use self::group::GroupInfo;
@@ -107,6 +110,106 @@ impl Layer {
             image: None,
             divider_type,
         }
+    }
+
+    /// Creates a new Photoshop document layer from a file stream.
+    /// The file stream must have the location set to the correct
+    /// place. The file stream is passed by reference, so the
+    /// location will be updated when we’re done creating the document.
+    pub fn from_file_stream(file_stream: &mut FileStreamReader) -> anyhow::Result<Self> {
+        let top = file_stream.read_be()?;
+        let left = file_stream.read_be()?;
+        let bottom: i32 = file_stream.read_be()?;
+        let right: i32 = file_stream.read_be()?;
+
+        let bounds = Rect::new(left, top, right - left, bottom - top);
+
+        let mut output = Self::new(bounds);
+
+        output.number_of_channels = file_stream.read_be()?;
+
+        // Get the information about each channel.
+        for _ in 0..output.number_of_channels {
+            let channel_information = file_stream.read_be()?;
+            let channel_length: u32 = file_stream.read_be()?;
+
+            let channel_type = ColorChannelType::from_value(channel_information);
+            let channel = ColorChannel::new(channel_type, channel_length as usize);
+            output.channels.push(channel);
+        }
+
+        let blend_mode_signature = file_stream.read_bytes(4)?;
+
+        if blend_mode_signature != constants::RESOURCE_SIGNATURE {
+            anyhow::bail!(ReadError::InvalidResourceSignature);
+        }
+
+        let blend_mode_string = file_stream.read_string(4)?;
+        output.blend_mode = BlendMode::from(blend_mode_string.as_str());
+
+        output.opacity = file_stream.read_be()?;
+
+        // Don’t know what clipping is.
+        file_stream.skip_bytes(1)?;
+
+        let flags: u8 = file_stream.read_be()?;
+
+        // If the second bit is set, then the layer is hidden (despite
+        // the documentation implying the opposite).
+        output.is_hidden = (flags & 0b0000_0010) == 0b0000_0010;
+
+        // Filler
+        file_stream.skip_bytes(1)?;
+
+        let extra_data_length: u32 = file_stream.read_be()?;
+
+        // Skip layer mask data
+        let layer_mask_data_length: u32 = file_stream.read_be()?;
+        file_stream.skip_bytes(layer_mask_data_length as usize)?;
+
+        // Skip blending ranges data
+        let layer_blending_ranges_data_length: u32 = file_stream.read_be()?;
+        file_stream.skip_bytes(layer_blending_ranges_data_length as usize)?;
+
+        // Get the layer name.
+        let pascal_string = pascal::string_from_file_stream(file_stream)?;
+        output.name = pascal_string.1;
+
+        // Work out how many bytes are left for any other data.
+        let remaining_length = extra_data_length as usize
+            - std::mem::size_of::<u32>()
+            - layer_mask_data_length as usize
+            - std::mem::size_of::<u32>()
+            - layer_blending_ranges_data_length as usize
+            - std::mem::size_of::<u8>()
+            - pascal_string.0;
+
+        let additional_data = file_stream.read_bytes(remaining_length)?;
+        let mut additional_data_file_stream = FileStreamReader::from_data(additional_data);
+
+        // while additionalDataFileStream.location < additionalData.count - 8 {
+        //     let resourceSignature = additionalDataFileStream.readString(4)
+        //     // Search through the file stream one byte at a time to find the
+        //     // resource signatures. This could be optimised.
+        //     guard resourceSignature == Document.Constants.resourceSignature else {
+        //         additionalDataFileStream.location -= 3
+        //         continue
+        //     }
+
+        //     let key = additionalDataFileStream.readString(4)
+        //     var length = Int(additionalDataFileStream.readUInt32())
+
+        //     if key == Group.Constants.sectionDividerKey {
+        //         let dividerTypeRawValue = additionalDataFileStream.readUInt32()
+        //         self.dividerType = Group.DividerType(rawValue: dividerTypeRawValue) ?? .other
+
+        //         // We currently just read the divider type and anything else is skipped.
+        //         length -= MemoryLayout<Int32>.size
+        //     }
+        //     additionalDataFileStream.skipBytes(length)
+        // }
+
+        Ok(output)
     }
 }
 
@@ -354,8 +457,121 @@ impl Layer {
     }
 }
 
+// MARK: Decoding
+
+impl Layer {
+    /// Parses the image from the file stream and sets it
+    /// as the image for the layer if parsing is successful.
+    fn parse_image(
+        &mut self,
+        file_stream: &mut FileStreamReader,
+        image_compression: Option<&ImageCompression>,
+    ) -> anyhow::Result<()> {
+        let mut output_image_bytes =
+            vec![0u8; self.bounds.size.width as usize * self.bounds.size.height as usize * 4];
+
+        for channel in self.channels.iter() {
+            if channel.data_length <= 2 {
+                file_stream.skip_bytes(channel.data_length)?;
+                continue;
+            }
+
+            let is_supported_type = channel.color_type == ColorChannelType::Alpha
+                || channel.color_type == ColorChannelType::Red
+                || channel.color_type == ColorChannelType::Green
+                || channel.color_type == ColorChannelType::Blue;
+
+            if !is_supported_type {
+                file_stream.skip_bytes(channel.data_length)?;
+                continue;
+            }
+
+            let image_compression = ImageCompression::from_value(file_stream.read_be()?).unwrap();
+        }
+        // for channel in self.channels {
+
+        //     let imageCompression = ImageCompression(rawValue: fileStream.readInt16())
+
+        //     if imageCompression == .rawData {
+        //         let size = Int(self.bounds.width * self.bounds.height)
+        //         channel.data = fileStream.readData(size)
+        //     } else if imageCompression == .rle {
+        //         // Read in all the line lengths.
+        //         var lineLengths: [UInt16] = []
+        //         for _ in 0 ..< height {
+        //             lineLengths.append(fileStream.readUInt16())
+        //         }
+
+        //         var outputData = Data()
+
+        //         for lineLength in lineLengths {
+        //             let encodedData = fileStream.readData(Int(lineLength))
+
+        //             guard encodedData.count > 0 else {
+        //                 break
+        //             }
+
+        //             let subdata = encodedData[0 ..< lineLength]
+        //             let decodedData = subdata.rleDecoded()
+        //             outputData.append(decodedData)
+        //         }
+
+        //         channel.data = outputData
+        //     }
+        // }
+
+        // guard let alphaChannel = self.channels.filter({ $0.type == .alpha }).first,
+        //       let redChannel = self.channels.filter({ $0.type == .red }).first,
+        //       let greenChannel = self.channels.filter({ $0.type == .green }).first,
+        //       let blueChannel = self.channels.filter({ $0.type == .blue }).first
+        // // TODO: Throw an error here.
+        // else { return }
+
+        // for yPosition in 0 ..< height {
+        //     for xPosition in 0 ..< width {
+        //         let byteIndex = (yPosition * width) + xPosition
+
+        //         // Default the alpha channel to be max,
+        //         // and all the colour channels to 0.
+        //         var alpha: UInt8 = .max
+        //         if alphaChannel.data.count > byteIndex {
+        //             alpha = alphaChannel.data[byteIndex]
+        //         }
+        //         var red: UInt8 = .min
+        //         if redChannel.data.count > byteIndex {
+        //             red = redChannel.data[byteIndex]
+        //         }
+        //         var green: UInt8 = .min
+        //         if greenChannel.data.count > byteIndex {
+        //             green = greenChannel.data[byteIndex]
+        //         }
+        //         var blue: UInt8 = .min
+        //         if blueChannel.data.count > byteIndex {
+        //             blue = blueChannel.data[byteIndex]
+        //         }
+
+        //         let outputByteIndex = byteIndex * 4
+        //         outputImageBytes[outputByteIndex] = red
+        //         outputImageBytes[outputByteIndex + 1] = green
+        //         outputImageBytes[outputByteIndex + 2] = blue
+        //         outputImageBytes[outputByteIndex + 3] = alpha
+        //     }
+        // }
+
+        // // try? testStream.data.write(to: URL(fileURLWithPath: "/tmp/*trees.data"))
+
+        // if outputImageBytes.isEmpty || self.bounds.size == .zero {
+        //     self.image = nil
+        // } else {
+        //     self.image = Image(unpremultipliedBitmapData: outputImageBytes, bytesPerRow: width * 4, size: self.bounds.size, context: context)
+        // }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
-mod tests {
+mod encode_tests {
     use std::path::PathBuf;
 
     use file_stream::read::FileStreamReader;
@@ -804,5 +1020,81 @@ mod tests {
 
         // Pascal name.
         assert_eq!(result[66..=69], [0x02, 0x4c, 0x31, 0x00]);
+    }
+}
+
+#[cfg(test)]
+mod decode_tests {
+    use file_stream::read::FileStreamReader;
+
+    use super::*;
+
+    #[test]
+    fn create_with_file_stream() {
+        let mut data = Vec::new();
+
+        // Top of bounding box.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x00]);
+        // Left.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x00]);
+        // Bottom.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x02]);
+        // Right.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x02]);
+        // Number of channels.
+        data.append(&mut vec![0x00, 0x04]);
+        // Alpha channel identifier.
+        data.append(&mut vec![0xFF, 0xFF]);
+        // Alpha channel length.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x06]);
+        // Red channel identifier.
+        data.append(&mut vec![0x00, 0x00]);
+        // Red channel length.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x06]);
+        // Green channel identifier.
+        data.append(&mut vec![0x00, 0x01]);
+        // Green channel length.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x06]);
+        // Blue channel identifier.
+        data.append(&mut vec![0x00, 0x02]);
+        // Blue channel length.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x06]);
+        // Blend mode signature.
+        data.append(&mut vec![0x38, 0x42, 0x49, 0x4D]);
+        // Blend mode.
+        data.append(&mut vec![0x6E, 0x6F, 0x72, 0x6D]);
+        // Opacity.
+        data.append(&mut vec![0xFF]);
+        // Clipping.
+        data.append(&mut vec![0x00]);
+        // Flags (includes visibility)
+        data.append(&mut vec![0x00]);
+        // Filler.
+        data.append(&mut vec![0x00]);
+
+        // Extra data length.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x14]);
+
+        // Mask data.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x00]);
+        // Blending ranges.
+        data.append(&mut vec![0x00, 0x00, 0x00, 0x00]);
+
+        // Layer name.
+        data.append(&mut vec![
+            0x08, 0x46, 0x72, 0x6F, 0x77, 0x6E, 0x69, 0x6E, 0x67, 0x00, 0x00, 0x00,
+        ]);
+
+        let mut file_stream = FileStreamReader::from_data(data).unwrap();
+
+        let layer = Layer::from_file_stream(&mut file_stream).unwrap();
+
+        assert_eq!(layer.bounds, Rect::new(0, 0, 2, 2));
+        assert_eq!(layer.number_of_channels, 4);
+        assert_eq!(layer.channels.len(), 4);
+        assert_eq!(layer.blend_mode, BlendMode::Normal);
+        assert_eq!(layer.opacity, u8::MAX);
+        assert_eq!(layer.is_hidden, false);
+        assert_eq!(layer.name, Some("Frowning".to_string()));
     }
 }
