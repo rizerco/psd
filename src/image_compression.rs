@@ -1,7 +1,8 @@
 /// The image compression.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum ImageCompression {
     /// Raw data.
+    #[default]
     RawData,
     /// RLE compression.
     Rle,

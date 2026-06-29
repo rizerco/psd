@@ -1,4 +1,4 @@
-use std::mem;
+use std::{mem, u8};
 
 use file_stream::read::{FileStreamReader, Readable};
 use file_stream::write::FileStreamWriter;
@@ -466,15 +466,14 @@ impl Layer {
 impl Layer {
     /// Parses the image from the file stream and sets it
     /// as the image for the layer if parsing is successful.
-    fn parse_image(
-        &mut self,
-        file_stream: &mut FileStreamReader,
-        image_compression: Option<&ImageCompression>,
-    ) -> anyhow::Result<()> {
+    pub(crate) fn parse_image(&mut self, file_stream: &mut FileStreamReader) -> anyhow::Result<()> {
         let mut output_image_bytes =
             vec![0u8; self.bounds.size.width as usize * self.bounds.size.height as usize * 4];
 
-        for channel in self.channels.iter() {
+        let width = self.bounds.width() as usize;
+        let height = self.bounds.height() as usize;
+
+        for channel in self.channels.iter_mut() {
             if channel.data_length <= 2 {
                 file_stream.skip_bytes(channel.data_length)?;
                 continue;
@@ -490,7 +489,42 @@ impl Layer {
                 continue;
             }
 
-            let image_compression = ImageCompression::from_value(file_stream.read_be()?).unwrap();
+            let image_compression =
+                ImageCompression::from_value(file_stream.read_be()?).unwrap_or_default();
+
+            match image_compression {
+                ImageCompression::RawData => {
+                    let size = width * height;
+                    channel.data = file_stream.read_bytes(size as usize)?;
+                }
+                ImageCompression::Rle => {
+                    // Read in all the line lengths.
+                    let mut line_lengths: Vec<u16> = Vec::new();
+                    for _ in 0..self.bounds.height() {
+                        line_lengths.push(file_stream.read_be()?);
+                    }
+
+                    // let mut output_data = Vec::new();
+
+                    for line_length in line_lengths {
+                        let encoded_data = file_stream.read_bytes(line_length as usize)?;
+
+                        if encoded_data.is_empty() {
+                            break;
+                        }
+
+                        let subdata = &encoded_data[0..line_length as usize];
+
+                        todo!();
+
+                        // output_data.append(other);
+                    }
+                }
+                ImageCompression::ZipWithoutPrediction | ImageCompression::ZipWithPrediction => {
+                    anyhow::bail!(ReadError::UnsupportedImageCompression)
+                }
+            }
+            // if image_compression ==
         }
         // for channel in self.channels {
 
@@ -524,51 +558,77 @@ impl Layer {
         //     }
         // }
 
-        // guard let alphaChannel = self.channels.filter({ $0.type == .alpha }).first,
-        //       let redChannel = self.channels.filter({ $0.type == .red }).first,
-        //       let greenChannel = self.channels.filter({ $0.type == .green }).first,
-        //       let blueChannel = self.channels.filter({ $0.type == .blue }).first
-        // // TODO: Throw an error here.
-        // else { return }
+        let Some(alpha_channel) = self
+            .channels
+            .iter()
+            .find(|c| c.color_type == ColorChannelType::Alpha)
+        else {
+            anyhow::bail!(ReadError::UnsupportedImageChannels)
+        };
+        let Some(red_channel) = self
+            .channels
+            .iter()
+            .find(|c| c.color_type == ColorChannelType::Red)
+        else {
+            anyhow::bail!(ReadError::UnsupportedImageChannels)
+        };
+        let Some(green_channel) = self
+            .channels
+            .iter()
+            .find(|c| c.color_type == ColorChannelType::Green)
+        else {
+            anyhow::bail!(ReadError::UnsupportedImageChannels)
+        };
+        let Some(blue_channel) = self
+            .channels
+            .iter()
+            .find(|c| c.color_type == ColorChannelType::Blue)
+        else {
+            anyhow::bail!(ReadError::UnsupportedImageChannels)
+        };
 
-        // for yPosition in 0 ..< height {
-        //     for xPosition in 0 ..< width {
-        //         let byteIndex = (yPosition * width) + xPosition
+        for y in 0..height {
+            for x in 0..width {
+                let byte_index = y * width + x;
 
-        //         // Default the alpha channel to be max,
-        //         // and all the colour channels to 0.
-        //         var alpha: UInt8 = .max
-        //         if alphaChannel.data.count > byteIndex {
-        //             alpha = alphaChannel.data[byteIndex]
-        //         }
-        //         var red: UInt8 = .min
-        //         if redChannel.data.count > byteIndex {
-        //             red = redChannel.data[byteIndex]
-        //         }
-        //         var green: UInt8 = .min
-        //         if greenChannel.data.count > byteIndex {
-        //             green = greenChannel.data[byteIndex]
-        //         }
-        //         var blue: UInt8 = .min
-        //         if blueChannel.data.count > byteIndex {
-        //             blue = blueChannel.data[byteIndex]
-        //         }
+                // Default the alpha channel to be max,
+                // and all the colour channels to 0.
+                let mut alpha = u8::MAX;
+                if alpha_channel.data.len() > byte_index {
+                    alpha = alpha_channel.data[byte_index];
+                }
+                let mut red = u8::MIN;
+                if red_channel.data.len() > byte_index {
+                    red = red_channel.data[byte_index];
+                }
+                let mut green = u8::MIN;
+                if green_channel.data.len() > byte_index {
+                    green = green_channel.data[byte_index];
+                }
+                let mut blue = u8::MIN;
+                if blue_channel.data.len() > byte_index {
+                    blue = blue_channel.data[byte_index];
+                }
 
-        //         let outputByteIndex = byteIndex * 4
-        //         outputImageBytes[outputByteIndex] = red
-        //         outputImageBytes[outputByteIndex + 1] = green
-        //         outputImageBytes[outputByteIndex + 2] = blue
-        //         outputImageBytes[outputByteIndex + 3] = alpha
-        //     }
-        // }
+                let output_byte_index = byte_index * 4;
+                output_image_bytes[output_byte_index] = red;
+                output_image_bytes[output_byte_index + 1] = green;
+                output_image_bytes[output_byte_index + 2] = blue;
+                output_image_bytes[output_byte_index + 3] = alpha;
+            }
+        }
 
         // // try? testStream.data.write(to: URL(fileURLWithPath: "/tmp/*trees.data"))
 
-        // if outputImageBytes.isEmpty || self.bounds.size == .zero {
-        //     self.image = nil
-        // } else {
-        //     self.image = Image(unpremultipliedBitmapData: outputImageBytes, bytesPerRow: width * 4, size: self.bounds.size, context: context)
-        // }
+        if output_image_bytes.is_empty() || self.bounds.size == Size::zero() {
+            self.image = None;
+        } else {
+            self.image = Some(Image {
+                data: output_image_bytes,
+                size: self.bounds.size.into(),
+                bytes_per_row: self.bounds.size.width as u32,
+            });
+        }
 
         Ok(())
     }

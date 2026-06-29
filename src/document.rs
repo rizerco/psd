@@ -163,9 +163,9 @@ impl Document {
 
             // The layer images are grouped together after
             // the layer info for all of the layers.
-            // for layer in output.layers {
-            //     layer.parseImageFromFileStream(file_stream, imageCompression: nil, context: context)
-            // }
+            for layer in output.layers.iter_mut() {
+                layer.parse_image(&mut file_stream)?;
+            }
         }
 
         Ok(output)
@@ -325,8 +325,27 @@ mod import_tests {
                 height: 1
             }
         );
+
+        assert_eq!(document.layers.len(), 1);
+
+        let layer = document.layers.first().unwrap();
+        assert_eq!(layer.name, Some("Layer 1".to_string()));
+        assert_eq!(layer.opacity, u8::MAX);
+        assert_eq!(layer.is_hidden, false);
+        let layer_image = layer.image.as_ref().unwrap();
+        assert_eq!(
+            layer_image.size,
+            graphics::Size {
+                width: 2,
+                height: 1
+            }
+        );
+        assert_eq!(
+            layer_image.pixel_color(graphics::Point { x: 0, y: 0 }),
+            Some(graphics::Color::from_rgb_u32(0xd04648))
+        );
     }
-    //
+
     // let filePath = Bundle.module.path(forResource: "SimpleWithFolders", ofType: "psd")!
     // let fileURL = URL(fileURLWithPath: filePath)
     // let photoshopDocument = try? Document(fileURL: fileURL, context: self.renderContext, maximumAllowableSize: CGSize(width: 1024.0, height: 1024.0), maximumNumberOfLayers: 100)

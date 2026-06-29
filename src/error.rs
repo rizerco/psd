@@ -24,4 +24,8 @@ pub enum ReadError {
     MaximumNumberOfLayersExceeded,
     #[error("No layer information was found.")]
     NoLayerInformation,
+    #[error("Unsupported image compression.")]
+    UnsupportedImageCompression,
+    #[error("Unsupported image channels. Only RGBA is currently supported.")]
+    UnsupportedImageChannels,
 }
