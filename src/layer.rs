@@ -185,29 +185,33 @@ impl Layer {
             - pascal_string.0;
 
         let additional_data = file_stream.read_bytes(remaining_length)?;
-        let mut additional_data_file_stream = FileStreamReader::from_data(additional_data);
 
-        // while additionalDataFileStream.location < additionalData.count - 8 {
-        //     let resourceSignature = additionalDataFileStream.readString(4)
-        //     // Search through the file stream one byte at a time to find the
-        //     // resource signatures. This could be optimised.
-        //     guard resourceSignature == Document.Constants.resourceSignature else {
-        //         additionalDataFileStream.location -= 3
-        //         continue
-        //     }
+        let mut index = 0;
 
-        //     let key = additionalDataFileStream.readString(4)
-        //     var length = Int(additionalDataFileStream.readUInt32())
+        while index + 8 < additional_data.len() {
+            // Search through the file stream one byte at a time to find the
+            // resource signatures. This could probably be optimised.
+            let potential_signature = additional_data[index..index + 4].to_vec();
+            if potential_signature == constants::RESOURCE_SIGNATURE {
+                index += 4;
 
-        //     if key == Group.Constants.sectionDividerKey {
-        //         let dividerTypeRawValue = additionalDataFileStream.readUInt32()
-        //         self.dividerType = Group.DividerType(rawValue: dividerTypeRawValue) ?? .other
+                let key = additional_data[index..index + 4].to_vec();
+                index += 4;
 
-        //         // We currently just read the divider type and anything else is skipped.
-        //         length -= MemoryLayout<Int32>.size
-        //     }
-        //     additionalDataFileStream.skipBytes(length)
-        // }
+                let length = additional_data[index..index + 4].try_into()?;
+                index += 4;
+                let length = u32::from_be_bytes(length);
+                if key == group::constants::SECTION_DIVIDER_KEY {
+                    let value = additional_data[index..index + 4].try_into()?;
+                    let value = u32::from_be_bytes(value);
+                    output.divider_type = DividerType::from(value);
+                }
+
+                index += length as usize;
+            } else {
+                index += 1;
+            }
+        }
 
         Ok(output)
     }

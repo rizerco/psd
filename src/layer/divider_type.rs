@@ -11,3 +11,14 @@ pub enum DividerType {
     /// A section divider, used to mark the end of a group.
     SectionDivider = 3,
 }
+
+impl From<u32> for DividerType {
+    fn from(value: u32) -> Self {
+        match value {
+            1 => Self::OpenFolder,
+            2 => Self::ClosedFolder,
+            3 => Self::SectionDivider,
+            _ => Self::Other,
+        }
+    }
+}
