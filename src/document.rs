@@ -1,3 +1,4 @@
+use std::f32::NEG_INFINITY;
 use std::mem;
 use std::path::Path;
 
@@ -7,11 +8,12 @@ use graphics::image::ImageConstraints;
 use graphics::{Image, Point, Rect, Size};
 
 use crate::color_mode::ColorMode;
+use crate::divider_type::DividerType;
 use crate::error::ReadError;
 use crate::image_compression::ImageCompression;
 use crate::layer::Layer;
 use crate::layer_container::LayerContainer;
-use crate::{LayerType, data, error, image};
+use crate::{LayerType, data, image};
 
 pub(crate) mod constants;
 
@@ -168,7 +170,58 @@ impl Document {
             }
         }
 
+        output.create_groups();
+
         Ok(output)
+    }
+
+    /// Creates groups from the layers based on the divider types.
+    fn create_groups(&mut self) {
+        let mut index = 0;
+        while index < self.layers.len() {
+            let layer = &self.layers[index];
+            if layer.divider_type == DividerType::SectionDivider {
+                // Remove the divider.
+                self.layers.remove(index);
+                index = self.create_group(index);
+            }
+            index += 1;
+        }
+    }
+
+    // /// Creates a group for the layers at a given layer index.
+    // /// This index should be that of the group divider.
+    fn create_group(&mut self, index: usize) -> usize {
+        let mut index = index;
+
+        let mut child_layers = Vec::new();
+
+        // Get the next layer.
+        let mut next_layer = self.layers.remove(index);
+        while next_layer.divider_type != DividerType::OpenFolder
+            && next_layer.divider_type != DividerType::ClosedFolder
+        {
+            // A group inside a group.
+            if next_layer.divider_type == DividerType::SectionDivider {
+                index = self.create_group(index);
+            }
+            // A normal layer.
+            else {
+                child_layers.push(next_layer.clone());
+            }
+            next_layer = self.layers.remove(index);
+        }
+
+        let is_open = next_layer.divider_type == DividerType::OpenFolder;
+        let mut group = Layer::group(child_layers, is_open, self.size);
+        group.is_hidden = next_layer.is_hidden;
+        group.name = next_layer.name;
+        group.blend_mode = next_layer.blend_mode;
+        group.bounds = next_layer.bounds;
+        group.channels = next_layer.channels;
+        self.layers.insert(index, group);
+
+        index
     }
 }
 
@@ -313,7 +366,7 @@ impl LayerContainer for Document {
 
 #[cfg(test)]
 mod import_tests {
-    use crate::Document;
+    use crate::{Document, LayerType};
 
     #[test]
     fn small() {
@@ -346,26 +399,37 @@ mod import_tests {
         );
     }
 
-    // let filePath = Bundle.module.path(forResource: "SimpleWithFolders", ofType: "psd")!
-    // let fileURL = URL(fileURLWithPath: filePath)
-    // let photoshopDocument = try? Document(fileURL: fileURL, context: self.renderContext, maximumAllowableSize: CGSize(width: 1024.0, height: 1024.0), maximumNumberOfLayers: 100)
+    #[test]
+    fn simple_with_folders() {
+        let document = Document::open("tests/resources/simple-with-folders.psd").unwrap();
 
-    // XCTAssertNotNil(photoshopDocument, "The parsed Photoshop document should not be nil.")
-    // XCTAssertEqual(photoshopDocument?.layers.count, 3, "The number of layers was not the expected value.")
+        assert_eq!(document.layers.len(), 3);
 
-    // guard let group0 = photoshopDocument?.layers[0] as? Group else {
-    //     XCTFail("Expected a group")
-    //     return
-    // }
-    // XCTAssertEqual(group0.name, "Frame 1")
-    // XCTAssertEqual(group0.layers.compactMap { $0.name }, ["Layer 1", "Layer 2"])
+        let group_0 = &document.layers[0];
+        assert!(match group_0.layer_type {
+            LayerType::Group(_) => true,
+            _ => false,
+        });
+        let layers = match group_0.layer_type.clone() {
+            LayerType::Group(group_info) => group_info.layers,
+            _ => Vec::new(),
+        };
+        assert_eq!(group_0.name, Some("Frame 1".to_string()));
+        assert_eq!(layers[0].name, Some("Layer 1".to_string()));
+        assert_eq!(layers[1].name, Some("Layer 2".to_string()));
 
-    // guard let group1 = photoshopDocument?.layers[1] as? Group else {
-    //     XCTFail("Expected a group")
-    //     return
-    // }
-    // XCTAssertEqual(group1.name, "Frame 2")
-    // XCTAssertEqual(group1.layers.compactMap { $0.name }, ["Layer 1"])
+        let group_1 = &document.layers[1];
+        assert!(match group_1.layer_type {
+            LayerType::Group(_) => true,
+            _ => false,
+        });
+        let layers = match group_1.layer_type.clone() {
+            LayerType::Group(group_info) => group_info.layers,
+            _ => Vec::new(),
+        };
+        assert_eq!(group_1.name, Some("Frame 2".to_string()));
+        assert_eq!(layers[0].name, Some("Layer 1".to_string()));
+    }
 }
 
 #[cfg(test)]

@@ -15,7 +15,7 @@ use crate::{constants, data};
 use self::divider_type::DividerType;
 use self::group::GroupInfo;
 
-mod divider_type;
+pub(crate) mod divider_type;
 mod group;
 
 /// A layer in a Photoshop document.
@@ -42,7 +42,7 @@ pub struct Layer {
     /// The type of divider this layer represents. Used for
     /// groups and group markers, and set to `other` for
     /// other types of layers.
-    divider_type: DividerType,
+    pub(crate) divider_type: DividerType,
 }
 
 /// The type of the layer.
