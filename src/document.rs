@@ -460,9 +460,26 @@ mod import_tests {
     }
 
     #[test]
-    fn rle() {
+    fn rle_2x2() {
         let document = Document::open("tests/resources/2x2-magick-rle.psd").unwrap();
         let expected_preview_image = graphics::Image::open("tests/resources/2x2.png").unwrap();
+
+        let layer_image = document
+            .layers
+            .first()
+            .as_ref()
+            .unwrap()
+            .image
+            .as_ref()
+            .unwrap();
+
+        assert!(layer_image.appears_equal_to(&expected_preview_image));
+    }
+
+    #[test]
+    fn rle_2x3() {
+        let document = Document::open("tests/resources/2x3-magick-rle.psd").unwrap();
+        let expected_preview_image = graphics::Image::open("tests/resources/2x3.png").unwrap();
 
         let layer_image = document
             .layers
@@ -629,6 +646,31 @@ mod export_tests {
 
         // std::fs::write("/tmp/simple-with-group-rs.psd", &data).unwrap();
 
+        assert_eq!(data, expected_data);
+    }
+
+    #[test]
+    fn january_2021_issue() {
+        let mut background_layer = Layer::new(Rect::new(0, 0, 764, 180));
+        background_layer.image = Some(Image::open("tests/resources/background.png").unwrap());
+        background_layer.name = Some("Background".to_string());
+
+        let mut layer = Layer::new(Rect::new(6, 1, 764, 114));
+        layer.image = Some(Image::open("tests/resources/layer.png").unwrap());
+        layer.name = Some("Layer".to_string());
+
+        let mut document = Document::new();
+        document.size = background_layer.bounds.size.into();
+
+        document.layers = vec![background_layer, layer];
+
+        document.preview_image = Some(Image::open("tests/resources/preview.png").unwrap());
+
+        let data = document.file_data().unwrap();
+
+        // std::fs::write("/tmp/january-2021-issue.psd", &data).unwrap();
+
+        let expected_data = std::fs::read("tests/resources/january-2021-issue.psd").unwrap();
         assert_eq!(data, expected_data);
     }
 }
