@@ -458,6 +458,23 @@ mod import_tests {
         assert_eq!(inner_layers[0].name, Some("Rosalina".to_string()));
         assert_eq!(inner_layers[1].name, Some("Pedro".to_string()));
     }
+
+    #[test]
+    fn rle() {
+        let document = Document::open("tests/resources/2x2-magick-rle.psd").unwrap();
+        let expected_preview_image = graphics::Image::open("tests/resources/2x2.png").unwrap();
+
+        let layer_image = document
+            .layers
+            .first()
+            .as_ref()
+            .unwrap()
+            .image
+            .as_ref()
+            .unwrap();
+
+        assert!(layer_image.appears_equal_to(&expected_preview_image));
+    }
 }
 
 #[cfg(test)]

@@ -591,7 +591,7 @@ impl Layer {
             self.image = Some(Image {
                 data: output_image_bytes,
                 size: self.bounds.size.into(),
-                bytes_per_row: self.bounds.size.width as u32,
+                bytes_per_row: width as u32 * 4,
             });
         }
 
