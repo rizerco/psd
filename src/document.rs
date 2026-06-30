@@ -183,46 +183,45 @@ impl Document {
             if layer.divider_type == DividerType::SectionDivider {
                 // Remove the divider.
                 self.layers.remove(index);
-                index = self.create_group(index);
+                let group = create_group(&mut self.layers, &mut index, self.size);
+                self.layers.insert(index, group);
             }
             index += 1;
         }
     }
+}
 
-    // /// Creates a group for the layers at a given layer index.
-    // /// This index should be that of the group divider.
-    fn create_group(&mut self, index: usize) -> usize {
-        let mut index = index;
+/// Creates a group for the layers at a given layer index.
+/// This index should be that of the group divider.
+fn create_group(layers: &mut Vec<Layer>, index: &mut usize, container_size: Size<u32>) -> Layer {
+    let mut child_layers = Vec::new();
 
-        let mut child_layers = Vec::new();
-
-        // Get the next layer.
-        let mut next_layer = self.layers.remove(index);
-        while next_layer.divider_type != DividerType::OpenFolder
-            && next_layer.divider_type != DividerType::ClosedFolder
-        {
-            // A group inside a group.
-            if next_layer.divider_type == DividerType::SectionDivider {
-                index = self.create_group(index);
-            }
-            // A normal layer.
-            else {
-                child_layers.push(next_layer.clone());
-            }
-            next_layer = self.layers.remove(index);
+    // Get the next layer.
+    let mut next_layer = layers.remove(*index);
+    while next_layer.divider_type != DividerType::OpenFolder
+        && next_layer.divider_type != DividerType::ClosedFolder
+    {
+        // A group inside a group.
+        if next_layer.divider_type == DividerType::SectionDivider {
+            let group = create_group(layers, index, container_size);
+            child_layers.push(group);
         }
-
-        let is_open = next_layer.divider_type == DividerType::OpenFolder;
-        let mut group = Layer::group(child_layers, is_open, self.size);
-        group.is_hidden = next_layer.is_hidden;
-        group.name = next_layer.name;
-        group.blend_mode = next_layer.blend_mode;
-        group.bounds = next_layer.bounds;
-        group.channels = next_layer.channels;
-        self.layers.insert(index, group);
-
-        index
+        // A normal layer.
+        else {
+            child_layers.push(next_layer.clone());
+        }
+        next_layer = layers.remove(*index);
     }
+
+    let is_open = next_layer.divider_type == DividerType::OpenFolder;
+    let mut group = Layer::group(child_layers, is_open, container_size);
+    group.is_hidden = next_layer.is_hidden;
+    group.name = next_layer.name;
+    group.blend_mode = next_layer.blend_mode;
+    group.bounds = next_layer.bounds;
+    group.channels = next_layer.channels;
+
+    group
 }
 
 // MARK: Export
@@ -429,6 +428,35 @@ mod import_tests {
         };
         assert_eq!(group_1.name, Some("Frame 2".to_string()));
         assert_eq!(layers[0].name, Some("Layer 1".to_string()));
+    }
+
+    #[test]
+    fn simple_with_nested_folders() {
+        let document = Document::open("tests/resources/foldered.psd").unwrap();
+
+        assert_eq!(document.layers.len(), 1);
+
+        let group_0 = &document.layers[0];
+        assert!(match group_0.layer_type {
+            LayerType::Group(_) => true,
+            _ => false,
+        });
+        let layers = match group_0.layer_type.clone() {
+            LayerType::Group(group_info) => group_info.layers,
+            _ => Vec::new(),
+        };
+        assert_eq!(group_0.name, Some("Grouping".to_string()));
+        assert_eq!(layers[0].name, Some("Background".to_string()));
+        assert_eq!(layers[1].name, Some("Masterdon".to_string()));
+
+        let group_1 = layers[1].clone();
+        let inner_layers = match group_1.layer_type.clone() {
+            LayerType::Group(group_info) => group_info.layers,
+            _ => Vec::new(),
+        };
+        assert_eq!(group_1.name, Some("Masterdon".to_string()));
+        assert_eq!(inner_layers[0].name, Some("Rosalina".to_string()));
+        assert_eq!(inner_layers[1].name, Some("Pedro".to_string()));
     }
 }
 

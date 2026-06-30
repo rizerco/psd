@@ -78,6 +78,30 @@ pub fn encoded(source: &[u8]) -> Vec<u8> {
     output
 }
 
+/// Returns the data decoded using the RLE algorithm.
+pub fn decoded(data: &[u8]) -> Vec<u8> {
+    let mut output = Vec::new();
+    let mut index = 0;
+    while index < data.len() {
+        let repeats_byte = data[index];
+        index += 1;
+
+        if repeats_byte > 128 {
+            let number_of_repeats = 1 + (u8::MAX - repeats_byte + 1) as usize;
+            let mut pixel_data = vec![data[index]; number_of_repeats];
+            index += 1;
+            output.append(&mut pixel_data);
+        } else if repeats_byte < 128 {
+            let number_of_repeats = (repeats_byte + 1) as usize;
+            let mut pixel_data = data[index..index + number_of_repeats].to_vec();
+            index += number_of_repeats;
+            output.append(&mut pixel_data);
+        }
+        // 128 is an edge case that should be skipped.
+    }
+    output
+}
+
 // MARK: Test
 
 #[cfg(test)]
@@ -268,5 +292,24 @@ mod tests {
         ];
 
         assert_eq!(encoded_data, expected_data);
+    }
+
+    #[test]
+    fn rle_decode() {
+        let original_data = vec![
+            0xFE, 0xAA, 0x02, 0x80, 0x00, 0x2A, 0xFD, 0xAA, 0x03, 0x80, 0x00, 0x2A, 0x22, 0xF7,
+            0xAA,
+        ];
+
+        // Expecting: AA AA AA 80 00 2A AA AA AA AA 80 00 2A 22 AA AA AA AA AA AA AA AA AA AA
+        let decoded_data = super::decoded(&original_data);
+        assert_eq!(decoded_data.len(), 24);
+
+        let expected_data = vec![
+            0xAA, 0xAA, 0xAA, 0x80, 0x00, 0x2A, 0xAA, 0xAA, 0xAA, 0xAA, 0x80, 0x00, 0x2A, 0x22,
+            0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
+        ];
+
+        assert_eq!(decoded_data, expected_data);
     }
 }

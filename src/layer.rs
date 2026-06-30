@@ -6,11 +6,11 @@ use graphics::{Image, Point, Rect, Size};
 
 use crate::blend_mode::BlendMode;
 use crate::color_channel::{ColorChannel, ColorChannelType};
-use crate::document;
 use crate::error::ReadError;
 use crate::image_compression::ImageCompression;
 use crate::string::{self, pascal};
 use crate::{constants, data};
+use crate::{document, rle};
 
 use self::divider_type::DividerType;
 use self::group::GroupInfo;
@@ -504,7 +504,7 @@ impl Layer {
                         line_lengths.push(file_stream.read_be()?);
                     }
 
-                    // let mut output_data = Vec::new();
+                    let mut output_data = Vec::new();
 
                     for line_length in line_lengths {
                         let encoded_data = file_stream.read_bytes(line_length as usize)?;
@@ -514,49 +514,16 @@ impl Layer {
                         }
 
                         let subdata = &encoded_data[0..line_length as usize];
-
-                        todo!();
-
-                        // output_data.append(other);
+                        let mut decoded_data = rle::decoded(subdata);
+                        output_data.append(&mut decoded_data);
                     }
+                    channel.data = output_data;
                 }
                 ImageCompression::ZipWithoutPrediction | ImageCompression::ZipWithPrediction => {
                     anyhow::bail!(ReadError::UnsupportedImageCompression)
                 }
             }
-            // if image_compression ==
         }
-        // for channel in self.channels {
-
-        //     let imageCompression = ImageCompression(rawValue: fileStream.readInt16())
-
-        //     if imageCompression == .rawData {
-        //         let size = Int(self.bounds.width * self.bounds.height)
-        //         channel.data = fileStream.readData(size)
-        //     } else if imageCompression == .rle {
-        //         // Read in all the line lengths.
-        //         var lineLengths: [UInt16] = []
-        //         for _ in 0 ..< height {
-        //             lineLengths.append(fileStream.readUInt16())
-        //         }
-
-        //         var outputData = Data()
-
-        //         for lineLength in lineLengths {
-        //             let encodedData = fileStream.readData(Int(lineLength))
-
-        //             guard encodedData.count > 0 else {
-        //                 break
-        //             }
-
-        //             let subdata = encodedData[0 ..< lineLength]
-        //             let decodedData = subdata.rleDecoded()
-        //             outputData.append(decodedData)
-        //         }
-
-        //         channel.data = outputData
-        //     }
-        // }
 
         let Some(alpha_channel) = self
             .channels
@@ -617,8 +584,6 @@ impl Layer {
                 output_image_bytes[output_byte_index + 3] = alpha;
             }
         }
-
-        // // try? testStream.data.write(to: URL(fileURLWithPath: "/tmp/*trees.data"))
 
         if output_image_bytes.is_empty() || self.bounds.size == Size::zero() {
             self.image = None;
