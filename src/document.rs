@@ -218,6 +218,7 @@ fn create_group(layers: &mut Vec<Layer>, index: &mut usize, container_size: Size
     group.is_hidden = next_layer.is_hidden;
     group.name = next_layer.name;
     group.blend_mode = next_layer.blend_mode;
+    group.opacity = next_layer.opacity;
     group.bounds = next_layer.bounds;
     group.channels = next_layer.channels;
 
@@ -455,6 +456,7 @@ mod import_tests {
             _ => Vec::new(),
         };
         assert_eq!(group_1.name, Some("Masterdon".to_string()));
+        assert_eq!(group_1.opacity, 191);
         assert_eq!(inner_layers[0].name, Some("Rosalina".to_string()));
         assert_eq!(inner_layers[1].name, Some("Pedro".to_string()));
     }
