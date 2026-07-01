@@ -599,6 +599,20 @@ impl Layer {
     }
 }
 
+// MARK: Accessors
+
+impl Layer {
+    /// Returns true if this is both a group layer and the group is expanded.
+    pub fn is_expanded_group(&self) -> bool {
+        self.divider_type == DividerType::OpenFolder
+    }
+
+    /// Returns true if this is both a group layer and the group is collapsed.
+    pub fn is_collapsed_group(&self) -> bool {
+        self.divider_type == DividerType::ClosedFolder
+    }
+}
+
 #[cfg(test)]
 mod encode_tests {
     use std::path::PathBuf;
